@@ -59,6 +59,7 @@ fault_flags_t read_status(void) { return fault; }
 void core1_entry(void)
 {
     flash_safe_execute_core_init();
+    sleep_ms(200);
     /* === Ethernet init === */
     eth_init();     // auto DHCP, SNTP, SMTP background
     dev_web_init(); // HTTP server init
@@ -87,6 +88,7 @@ int main(void)
 {
     stdio_init_all();
     flash_safe_execute_core_init();
+    multicore_launch_core1(core1_entry);
 
     printf("\r\n=== RP2040 Modbus PSU Monitor + W5500 (Web + SNTP + DHCP) ===\r\n");
 
@@ -109,7 +111,7 @@ int main(void)
            cfg->snmp_manager_ip[2], cfg->snmp_manager_ip[3],
            cfg->dhcp_enable);
 
-    multicore_launch_core1(core1_entry);
+
 
     /* === UART0 (Modbus RS485) === */
     uart_init(MODBUS_UART, MODBUS_BAUDRATE);

@@ -44,7 +44,7 @@
 // Network Configuration
 // ==============================
 
-#define _HTTPSERVER_DEBUG_  1
+#define _HTTPSERVER_DEBUG_  0
 
 #define ETH_USE_DHCP        0   // 1: DHCP, 0: Static
 

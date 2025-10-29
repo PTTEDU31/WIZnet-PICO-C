@@ -69,7 +69,7 @@ void app_cfg_reset_default(void)
     g_cfg.dns[1] = 8;
     g_cfg.dns[2] = 8;
     g_cfg.dns[3] = 8;
-    g_cfg.dhcp_enable = 1;
+    g_cfg.dhcp_enable = 0;
 
     g_cfg.snmp_manager_ip[0] = 192;
     g_cfg.snmp_manager_ip[1] = 168;
@@ -78,7 +78,7 @@ void app_cfg_reset_default(void)
     g_cfg.trap_enable_mask = 0x07;
     g_cfg.snmp_enable = 1;
 
-    g_cfg.psu_slave_addr = 1;
+    g_cfg.psu_slave_addr = 131;
     g_cfg.psu_in_undervolt_V = 180.0f;
     g_cfg.psu_out_overvolt_V = 250.0f;
     g_cfg.psu_overcurrent_A = 2.5f;
@@ -95,13 +95,13 @@ void app_cfg_reset_default(void)
     g_cfg.ota_enable = 0;
 }
 // This function will be called when it's safe to call flash_range_erase
-static void call_flash_range_erase(void *param) {
+static void __not_in_flash_func(call_flash_range_erase)(void *param) {
     uint32_t offset = (uint32_t)param;
     flash_range_erase(offset, FLASH_SECTOR_SIZE);
 }
 
 // This function will be called when it's safe to call flash_range_program
-static void call_flash_range_program(void *param) {
+static void __not_in_flash_func(call_flash_range_program)(void *param) {
     uint32_t offset = ((uintptr_t*)param)[0];
     const uint8_t *data = (const uint8_t *)((uintptr_t*)param)[1];
     flash_range_program(offset, data, FLASH_PAGE_SIZE);

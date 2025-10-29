@@ -154,8 +154,7 @@ static void api_network(uint8_t s, void *req)
             send_json(s, "{\"result\":\"OK\"}");
             printf("[SYS] Config saved. System will reboot in 500ms...\n");
             fflush(stdout);
-            sleep_ms(500);
-            watchdog_reboot(0, 0, 0); // ✅ reset MCU an toàn
+            watchdog_reboot(0, 0, 1000);
         }
         else
         {

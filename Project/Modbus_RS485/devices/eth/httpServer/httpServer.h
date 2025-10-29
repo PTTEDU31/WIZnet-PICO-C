@@ -15,7 +15,7 @@ extern "C" {
 
 
 // HTTP Server debug message enable
-#define _HTTPSERVER_DEBUG_          0
+// #define _HTTPSERVER_DEBUG_          0
 
 #define INITIAL_WEBPAGE				"index.html"
 #define M_INITIAL_WEBPAGE			"m/index.html"
