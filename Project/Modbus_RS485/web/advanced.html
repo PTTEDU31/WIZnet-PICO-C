@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Advanced Settings</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="container">
+    <h2>Advanced Configuration</h2>
+
+    <form id="configForm">
+      <label>Device Name:</label>
+      <input id="deviceName" type="text" />
+
+      <label>UUID:</label>
+      <input id="uuid" type="text" readonly />
+
+
+      <label>Timezone (UTC+):</label>
+      <input id="timezone" type="number" min="-12" max="14" />
+
+      <label>PSU Slave Address (HEX):</label>
+      <input id="slaveAddr" type="text" maxlength="2" pattern="^[0-9A-Fa-f]{1,2}$" placeholder="e.g. 1D" />
+
+      <label>SNMP Enable:</label>
+      <select id="snmpEnable">
+        <option value="0">Disabled</option>
+        <option value="1">Enabled</option>
+      </select>
+
+      <label>SNMP Manager IP:</label>
+      <input id="ipSnmp" type="text" placeholder="192.168.1.10" />
+
+      <label>Trap Mask (Hex):</label>
+      <input id="trapMask" type="text" placeholder="e.g. 07" />
+
+      <label>Overtemperature Limit (°C):</label>
+      <input id="overTemp" type="number" step="0.1" />
+
+      <label>Overcurrent Limit (A):</label>
+      <input id="overCurrent" type="number" step="0.01" />
+
+      <label>Undervoltage Input (V):</label>
+      <input id="underVolt" type="number" step="0.1" />
+
+      <div class="buttons">
+        <button type="button" onclick="saveConfig()">💾 Save</button>
+        <button type="button" onclick="loadConfig()">🔄 Reload</button>
+        <a href="index.html">🏠 Home</a>
+      </div>
+    </form>
+  </div>
+
+  <script src="advanced.js"></script>
+</body>
+
+</html>
