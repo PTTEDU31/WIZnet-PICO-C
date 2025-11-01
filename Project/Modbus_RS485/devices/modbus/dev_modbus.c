@@ -5,9 +5,6 @@
 #include <stdio.h>
 #include <string.h>
 
-uint16_t g_fault_status = 0;
-fault_flags_t g_fault_flags = {0};
-
 // ============================
 // RS485 Direction Control
 // ============================
@@ -185,24 +182,24 @@ bool modbus_poll_fault_status(uint8_t slave_id, uint16_t *status_raw, fault_flag
 
     if (flags)
     {
-        flags->fan_fail      = (reg >> 0) & 1;
-        flags->otp           = (reg >> 1) & 1;
-        flags->ovp           = (reg >> 2) & 1;
-        flags->olp           = (reg >> 3) & 1;
-        flags->short_circuit = (reg >> 4) & 1;
-        flags->ac_fail       = (reg >> 5) & 1;
-        flags->op_off        = (reg >> 6) & 1;
+        flags->bits.fan_fail      = (reg >> 0) & 1;
+        flags->bits.otp           = (reg >> 1) & 1;
+        flags->bits.ovp           = (reg >> 2) & 1;
+        flags->bits.olp           = (reg >> 3) & 1;
+        flags->bits.short_circuit = (reg >> 4) & 1;
+        flags->bits.ac_fail       = (reg >> 5) & 1;
+        flags->bits.op_off        = (reg >> 6) & 1;
     }
 
-    printf("[MODBUS] FAULT=0x%04X | FAN=%d | OTP=%d | OVP=%d | OLP=%d | SHORT=%d | AC_FAIL=%d | OP_OFF=%d\n",
-           reg,
-           flags->fan_fail,
-           flags->otp,
-           flags->ovp,
-           flags->olp,
-           flags->short_circuit,
-           flags->ac_fail,
-           flags->op_off);
+    // printf("[MODBUS] FAULT=0x%04X | FAN=%d | OTP=%d | OVP=%d | OLP=%d | SHORT=%d | AC_FAIL=%d | OP_OFF=%d\n",
+        //    reg,
+        //    flags->fan_fail,
+        //    flags->otp,
+        //    flags->ovp,
+        //    flags->olp,
+        //    flags->short_circuit,
+        //    flags->ac_fail,
+        //    flags->op_off);
 
     return true;
 }

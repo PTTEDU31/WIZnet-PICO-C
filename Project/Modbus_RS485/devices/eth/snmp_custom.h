@@ -17,22 +17,22 @@ extern "C" {
 #define COMMUNITY       "public"
 #define COMMUNITY_SIZE  (strlen(COMMUNITY))
 
-/* ===========================
- * Global monitored variables
- * =========================== */
-extern float g_vin;   // input voltage
-extern float g_vout;  // output voltage
-extern float g_vset;  // set voltage
-extern float g_cc;    // current limit
-extern fault_flags_t g_fault_flags;   // trạng thái lỗi mới nhất
-extern uint16_t g_fault_status;
+// /* ===========================
+//  * Global monitored variables
+//  * =========================== */
+// extern float g_vin;   // input voltage
+// extern float g_vout;  // output voltage
+// extern float g_vset;  // set voltage
+// extern float g_iout;    // current output
+// extern float g_cc;    // current limit
+// extern float g_temp;    // current limit
+// extern fault_flags_t g_fault_flags;   // trạng thái lỗi mới nhất
+// extern uint16_t g_fault_status;
 
 /* SNMP Data Table */
 extern dataEntryType snmpData[];
 extern const int32_t maxData;
 
-/* Initialization */
-void initTable(void);
 /* Warm Start Trap */
 void initial_Trap(uint8_t *managerIP, uint8_t *agentIP);
 /* Warm Start Trap */

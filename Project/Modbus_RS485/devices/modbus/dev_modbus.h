@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include "../config/hardware_config.h"
+#include "../psu_data/psu_data.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,17 +39,6 @@ extern "C" {
 #define REG_FAULT_STATUS     0x0040
 #define REG_SYSTEM_STATUS    0x00C3
 
-typedef struct {
-    uint8_t fan_fail;     // Bit 0
-    uint8_t otp;          // Bit 1
-    uint8_t ovp;          // Bit 2
-    uint8_t olp;          // Bit 3
-    uint8_t short_circuit;// Bit 4
-    uint8_t ac_fail;      // Bit 5
-    uint8_t op_off;       // Bit 6
-} fault_flags_t;
-extern uint16_t g_fault_status;
-extern fault_flags_t g_fault_flags;
 
 // ============================
 // Core API

@@ -108,7 +108,6 @@ void snmpd_init(uint8_t * managerIP, uint8_t * agentIP, uint8_t sn_agent, uint8_
     if((SOCK_SNMP_AGENT > _WIZCHIP_SOCK_NUM_) || (SOCK_SNMP_TRAP > _WIZCHIP_SOCK_NUM_)) return;
 
     startTime = getSNMPTimeTick(); // Start time (unit: 10ms)
-    initTable(); // Settings for OID entry values
     
     initial_Trap(managerIP, agentIP);
 

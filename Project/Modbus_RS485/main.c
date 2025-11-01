@@ -7,13 +7,17 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <malloc.h>
 
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
 #include "hardware/gpio.h"
 #include "hardware/timer.h"
+#include "hardware/watchdog.h"
+#include "hardware/clocks.h"
 #include "pico/multicore.h"
 #include "pico/flash.h"
+#include "pico/sync.h"
 
 #include "config/common.h"
 #include "wizchip_conf.h"
@@ -23,12 +27,13 @@
 #include "devices/modbus/dev_modbus.h"
 #include "devices/eth/dev_web.h"
 #include "devices/eth/snmp_custom.h"
+#include "devices/psu_data/psu_data.h"
+#include "devices/led_status/led_status.h"
 #include "app_config.h"
 
-
-// ==============================
+// ===========================================================
 // RS485 Direction Control
-// ==============================
+// ===========================================================
 static inline void rs485_set_tx_mode(bool tx)
 {
     gpio_put(RS485_DIR_PIN, tx ? 1 : 0);
@@ -42,78 +47,58 @@ static bool repeating_timer_cb(struct repeating_timer *t)
     return true;
 }
 
-// ==============================
-// PSU Global Variables (để web đọc)
-// ==============================
-float g_vin = 0, g_vout = 0, g_vset = 0, g_cc = 0, g_temp = 0;
+// ===========================================================
+// Heartbeat giám sát core1
+// ===========================================================
+volatile uint32_t g_core1_heartbeat_ms = 0;
+#define CORE1_HB_INTERVAL_MS 500
+#define CORE1_HB_TIMEOUT_MS 5000
 
-fault_flags_t fault;
+// ===========================================================
+// Bộ nhớ
+// ===========================================================
+extern char __end__[];
+static size_t get_free_ram_bytes(void)
+{
+    char top;
+    struct mallinfo mi = mallinfo();
+    size_t free_heap = (size_t)mi.fordblks;
+    size_t stack_room = (size_t)(&top - __end__);
+    return free_heap ? free_heap + stack_room : stack_room;
+}
 
-// API cho /api/status
-float read_vin(void) { return g_vin; }
-float read_vout(void) { return g_vout; }
-float read_iout(void) { return g_cc; }
-float read_temp(void) { return g_temp; }
-fault_flags_t read_status(void) { return fault; }
+static void dump_mem_usage(const char *tag)
+{
+    struct mallinfo mi = mallinfo();
+    printf("[MEM] %s: free_heap=%d, used_heap=%d, ram_free_est=%u bytes\n",
+           tag, mi.fordblks, mi.uordblks, (unsigned)get_free_ram_bytes());
+}
+
+// ===========================================================
+// Safe reboot / reset
+// ===========================================================
+void safe_reboot(void)
+{
+    gpio_init(RESET_PIN);
+    gpio_set_dir(RESET_PIN, GPIO_OUT);
+    gpio_put(RESET_PIN, 1);
+    gpio_put(RESET_PIN, 0);
+}
+
+// ===========================================================
+// Core1 Entry (Modbus Polling)
+// ===========================================================
 
 void core1_entry(void)
 {
+    // ===========================================================
+    // 1️⃣ Khởi tạo an toàn vùng flash (tránh xung đột core0)
+    // ===========================================================
     flash_safe_execute_core_init();
-    sleep_ms(200);
-    /* === Ethernet init === */
-    eth_init();     // auto DHCP, SNTP, SMTP background
-    dev_web_init(); // HTTP server init
 
-    /* === Timer 1ms cho eth_tick === */
-    struct repeating_timer rt;
-    add_repeating_timer_ms(-1, repeating_timer_cb, NULL, &rt);
-
-    printf("[CORE1] Starting Ethernet loop...\n");
-
-    while (1)
-    {
-        // Thêm dev_eth_poll() hoặc SNTP, MQTT,… ở đây nếu cần
-        eth_task();     // DHCP, SNTP, SMTP background
-        dev_web_task(); // HTTP server
-
-        sleep_ms(1);
-    }
-}
-
-// ==============================
-// MAIN
-// ==============================
-
-int main(void)
-{
-    stdio_init_all();
-    flash_safe_execute_core_init();
-    multicore_launch_core1(core1_entry);
-
-    printf("\r\n=== RP2040 Modbus PSU Monitor + W5500 (Web + SNTP + DHCP) ===\r\n");
-
-    // === Load Configuration from Flash ===
-    if (!app_cfg_init())
-    {
-        printf("[CFG] Invalid or empty config, using defaults.\n");
-    }
-    else
-    {
-        printf("[CFG] Configuration loaded successfully.\n");
-    }
-
-    const app_config_t *cfg = app_cfg_get();
-    printf("[CFG] Device: %s | UUID: %s | Timezone: %d | Slave: %d\n",
-           cfg->device_name, cfg->uuid, cfg->timezone, cfg->psu_slave_addr);
-    printf("[CFG] IP: %d.%d.%d.%d | SNMP Manager: %d.%d.%d.%d | DHCP: %d\n",
-           cfg->ip[0], cfg->ip[1], cfg->ip[2], cfg->ip[3],
-           cfg->snmp_manager_ip[0], cfg->snmp_manager_ip[1],
-           cfg->snmp_manager_ip[2], cfg->snmp_manager_ip[3],
-           cfg->dhcp_enable);
-
-
-
-    /* === UART0 (Modbus RS485) === */
+    // ===========================================================
+    // 2️⃣ Khởi tạo UART0 RS485
+    // ===========================================================
     uart_init(MODBUS_UART, MODBUS_BAUDRATE);
     uart_set_format(MODBUS_UART, 8, 1, UART_PARITY_NONE);
     gpio_set_function(MODBUS_TX_PIN, GPIO_FUNC_UART);
@@ -123,26 +108,158 @@ int main(void)
     gpio_set_dir(RS485_DIR_PIN, GPIO_OUT);
     rs485_set_tx_mode(false);
 
-    printf("[OK] UART1 Modbus ready @ %d bps\r\n", MODBUS_BAUDRATE);
+    // ===========================================================
+    // 3️⃣ LED khởi tạo và báo trạng thái
+    // ===========================================================
+    led_init();
+    led_set_state(DEV_BOOTING);
+    printf("[CORE1] Starting loop...\n");
 
-    uint8_t slave_id = cfg->psu_slave_addr;
-    /* === Main Loop === */
+    // ===========================================================
+    // 4️⃣ Lấy config hệ thống 1 lần (chỉ đọc)
+    // ===========================================================
+    const app_config_t *cfg = app_cfg_get();
+
+    // ===========================================================
+    // 5️⃣ Biến thời gian
+    // ===========================================================
+    uint32_t last_hb = 0;
+    uint32_t last_led = 0;
+    uint32_t last_modbus = 0;
+
+    // ===========================================================
+    // 6️⃣ Vòng lặp chính Core1
+    // ===========================================================
+    while (true)
+    {
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+
+        // -------------------------------------------------------
+        // (A) Heartbeat: gửi nhịp cho Core0 để watchdog giám sát
+        // -------------------------------------------------------
+        if (now - last_hb >= CORE1_HB_INTERVAL_MS)
+        {
+            g_core1_heartbeat_ms = now;
+            last_hb = now;
+        }
+
+        // -------------------------------------------------------
+        // (B) Modbus polling định kỳ
+        // -------------------------------------------------------
+        if (now - last_modbus >= 300)   // 300ms/poll
+        {
+            last_modbus = now;
+
+            uint8_t slave_id = cfg->psu_slave_addr;
+            psu_data_t psu_local = {0};
+
+            // Ví dụ đọc một vài thanh ghi cơ bản
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VIN,  &psu_local.vin, 0.1f);
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VOUT, &psu_local.vout, 0.01f);
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, RED_TEMP,      &psu_local.temp, 0.1f);
+
+            // Fault & SNMP trap
+            uint16_t fault_raw = 0;
+            modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);
+            psu_data_update(&psu_local);
+            snmp_process_fault_trap(managerIP, agentIP);
+        }
+
+        // -------------------------------------------------------
+        // (C) LED hiển thị trạng thái (non-blocking)
+        // -------------------------------------------------------
+        led_update();
+
+        // -------------------------------------------------------
+        // (D) Debug pattern: đổi trạng thái LED 5s một lần
+        // -------------------------------------------------------
+        if (now - last_led > 5000)
+        {
+            static uint8_t idx = 0;
+            idx = (idx + 1) % 5;
+            led_set_state((device_state_t)idx);
+            last_led = now;
+        }
+
+        // -------------------------------------------------------
+        // (E) Nhường CPU cho hệ thống (non-blocking)
+        // -------------------------------------------------------
+        tight_loop_contents();
+    }
+}
+// ===========================================================
+// Main
+// ===========================================================
+int main(void)
+{
+    set_sys_clock_khz(200000, true);
+    stdio_init_all();
+
+    psu_data_init();
+
+    // Watchdog 4s
+    watchdog_enable(4000, true);
+
+    multicore_reset_core1();
+    multicore_launch_core1(core1_entry);
+    
+    flash_safe_execute_core_init();
+
+    printf("\r\n=== RP2040 Modbus PSU Monitor + W5500 (Web + SNTP + DHCP) ===\r\n");
+
+    if (!app_cfg_init())
+        printf("[CFG] Invalid or empty config, using defaults.\n");
+    else
+        printf("[CFG] Configuration loaded successfully.\n");
+
+    const app_config_t *cfg = app_cfg_get();
+    printf("[CFG] Device: %s | Slave: %d | DHCP: %d\n",
+           cfg->device_name, cfg->psu_slave_addr, cfg->dhcp_enable);
+
+    // Ethernet init
+    eth_init();
+    dev_web_init();
+
+    // 1ms timer tick cho W5500
+    struct repeating_timer rt;
+    add_repeating_timer_ms(-1, repeating_timer_cb, NULL, &rt);
+
+    dump_mem_usage("after init");
+
+    uint32_t last_hb_check = to_ms_since_boot(get_absolute_time());
+    uint32_t last_mem_log = 0;
+
     while (1)
     {
-        // ======= MODBUS PSU POLLING =======
-        modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VIN, &g_vin, 0.1f);
-        modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VOUT, &g_vout, 0.01f);
-        modbus_read_float(slave_id, MODBUS_FC_READ_HOLDING, REG_VOUT_SET, &g_vset, 0.01f);
-        modbus_read_float(slave_id, MODBUS_FC_READ_HOLDING, REG_CURVE_CC, &g_cc, 0.001f);
-        modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, RED_TEMP, &g_temp, 0.001f);
+        eth_task();
+        dev_web_task();
 
+        watchdog_update();
 
-        // 2️⃣ Đọc fault status và lưu vào biến toàn cục
-        modbus_poll_fault_status(slave_id, &g_fault_status, &g_fault_flags);
+        uint32_t now = to_ms_since_boot(get_absolute_time());
 
-        // 3️⃣ Xử lý trap nếu fault thay đổi
-        snmp_process_fault_trap(managerIP, agentIP);
+        // --- Giám sát Core1 ---
+        if (now - last_hb_check >= 500)
+        {
+            last_hb_check = now;
+            uint32_t hb = g_core1_heartbeat_ms;
+            if (hb != 0 && (now - hb) > CORE1_HB_TIMEOUT_MS)
+            {
+                printf("[WDT] Core1 heartbeat timeout (> %d ms). Restarting core1...\n",
+                       CORE1_HB_TIMEOUT_MS);
+                multicore_reset_core1();
+                sleep_ms(10);
+                multicore_launch_core1(core1_entry);
+            }
+        }
 
-        sleep_ms(2000);
+        // --- Log bộ nhớ ---
+        if (now - last_mem_log >= 10000)
+        {
+            last_mem_log = now;
+            dump_mem_usage("periodic");
+        }
+
+        sleep_ms(1);
     }
 }

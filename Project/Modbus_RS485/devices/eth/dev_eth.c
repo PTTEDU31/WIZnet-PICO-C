@@ -25,7 +25,7 @@
  * ============================= */
 #define SOCK_DHCP 0
 #define SOCK_SNTP 1
-#define SNTP_PERIOD 60000 // 60s periodic sync
+#define SNTP_PERIOD 600000 // 60s periodic sync
 #define RECV_TIMEOUT 10000
 static volatile uint32_t g_msec_cnt = 0;
 static uint8_t g_eth_buf[2048];
@@ -65,8 +65,8 @@ static void dhcp_assign(void)
            g_net_info.ip[2], g_net_info.ip[3]);
     print_network_information(g_net_info);
 
-    eth_sntp_init();     // start SNTP after DHCP success
-    eth_sntp_get_time(); // sync once immediately
+    // eth_sntp_init();     // start SNTP after DHCP success
+    // eth_sntp_get_time(); // sync once immediately
 }
 
 static void dhcp_conflict(void)
@@ -129,7 +129,6 @@ void eth_init(void)
            agentIP[0], agentIP[1], agentIP[2], agentIP[3]);
 
     snmpd_init(managerIP, agentIP, 2, 3); // socket SNMP agent & trap
-    initTable();                          // khởi tạo MIB
     initial_Trap(managerIP, agentIP);     // gửi trap warmStart
 }
 void eth_reinit_from_config(void)

@@ -6,30 +6,17 @@
 #include "dev_eth.h"
 #include "dev_web.h"
 #include "httpServer_user.h"
+#include "web_assets.h"
 
-
-
-#define ETHERNET_BUF_MAX_SIZE (2048)
-#define HTTP_SOCKET_MAX_NUM   4
+#define ETHERNET_BUF_MAX_SIZE (8*1024) // 8KB
+#define HTTP_SOCKET_MAX_NUM   8
 
 static uint8_t http_tx_buf[ETHERNET_BUF_MAX_SIZE];
 static uint8_t http_rx_buf[ETHERNET_BUF_MAX_SIZE];
-static uint8_t http_sock_list[HTTP_SOCKET_MAX_NUM] = {0, 1, 2, 3};
+static uint8_t http_sock_list[HTTP_SOCKET_MAX_NUM] = {0, 1, 2, 3, 4, 5, 6, 7};
 
-extern const unsigned char web_index[];
-extern const unsigned int  web_index_len;
-extern const unsigned char web_style[];
-extern const unsigned int  web_style_len;
-extern const unsigned char web_script[];
-extern const unsigned int  web_script_len;
-extern const unsigned char web_favicon[];
-extern const unsigned int  web_favicon_len;
-extern const unsigned char  web_advanced[];
-extern const unsigned char  web_advanced_script[];
-
-
-
-char system_log_buffer[1024];
+// System log buffer
+char system_log_buffer[4096];
 uint32_t system_log_length = 0;
 
 void log_printf(const char *fmt, ...)
@@ -52,18 +39,41 @@ void dev_web_init(void)
     printf("[WEB] Initializing HTTP server...\n");
 
     httpServer_init(http_tx_buf, http_rx_buf, HTTP_SOCKET_MAX_NUM, http_sock_list);
-    reg_httpServer_webContent("/", web_index); 
-    reg_httpServer_webContent("index.html", web_index);
-    reg_httpServer_webContent("style.css", web_style);
-    reg_httpServer_webContent("script.js", web_script);
-    reg_httpServer_webContent("favicon.ico", web_favicon);
-    reg_httpServer_webContent("advanced.html", web_advanced);
-    reg_httpServer_webContent("advanced.js", web_advanced_script);
-
+    
+    // ✅ Tự động đăng ký tất cả web assets
+    printf("[WEB] Registering %d web assets:\n", WEB_ASSETS_COUNT);
+    for (int i = 0; i < WEB_ASSETS_COUNT; i++) {
+        const web_asset_t *asset = &web_assets[i];
+        
+        // Đăng ký với httpServer
+        reg_httpServer_webContent((uint8_t *)asset->name, (uint8_t *)asset->data);
+        
+        // Log thông tin
+        printf("  [%d] %-20s (%s, %u bytes", 
+               i + 1, asset->name, asset->mime_type, asset->length);
+        
+        if (asset->is_gzipped) {
+            float ratio = (1.0f - (float)asset->length / asset->original_length) * 100;
+            printf(", gzipped %.1f%%", ratio);
+        }
+        printf(")\n");
+    }
+    
+    // Đăng ký root path riêng
+    const web_asset_t *index_asset = NULL;
+    for (int i = 0; i < WEB_ASSETS_COUNT; i++) {
+        if (strcmp(web_assets[i].name, "index.html") == 0) {
+            index_asset = &web_assets[i];
+            break;
+        }
+    }
+    if (index_asset) {
+        reg_httpServer_webContent((uint8_t *)"/", (uint8_t *)index_asset->data);
+    }
 
     httpServer_user_init();
 
-    printf("[WEB] Web server ready.\n");
+    printf("[WEB] Web server ready with %d assets.\n", WEB_ASSETS_COUNT);
 }
 
 void dev_web_task(void)
