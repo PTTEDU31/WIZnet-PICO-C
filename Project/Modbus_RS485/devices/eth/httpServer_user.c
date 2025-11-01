@@ -9,26 +9,29 @@
 #include "wizchip_conf.h"
 
 #include "pico/time.h"
+#include "hardware/watchdog.h"
+
 #include "dev_eth.h"
 #include "dev_web.h"
 #include "app_config.h"
-#include "hardware/watchdog.h"
+#include "../psu_data/psu_data.h"
 
 /* Forward declaration */
 extern void eth_reinit_from_config(void);
+extern void safe_reboot(void);
 
 /* ===========================================================
  * Helper: gửi phản hồi JSON hoặc TEXT
  * =========================================================== */
 static void send_json(uint8_t s, const char *json)
 {
-    send_http_response_header(s, PTYPE_JSON, strlen(json), STATUS_OK);
+    send_http_response_header(s, PTYPE_JSON, strlen(json), STATUS_OK, 0);
     send(s, (uint8_t *)json, strlen(json));
 }
 
 static void send_text(uint8_t s, const char *txt)
 {
-    send_http_response_header(s, PTYPE_TEXT, strlen(txt), STATUS_OK);
+    send_http_response_header(s, PTYPE_TEXT, strlen(txt), STATUS_OK, 0);
     send(s, (uint8_t *)txt, strlen(txt));
 }
 
@@ -40,11 +43,10 @@ static void parse_ip_field(const char *body, const char *key, uint8_t *out)
 
     if ((p = strstr(body, pattern)))
     {
-        // Tìm dấu " mở đầu value
         p = strchr(p + strlen(pattern), '"');
         if (p)
         {
-            q = strchr(p + 1, '"'); // Dấu " kết thúc
+            q = strchr(p + 1, '"');
             if (q && (q - p - 1) < (int)sizeof(tmp))
             {
                 memcpy(tmp, p + 1, q - p - 1);
@@ -65,7 +67,6 @@ static int http_get_body(uint8_t s, const char *in, char *out, size_t max_len)
     if (!in || !out || max_len == 0)
         return 0;
 
-    // Tìm delimiter giữa header và body
     const char *body = strstr(in, "\r\n\r\n");
     if (!body)
     {
@@ -75,37 +76,50 @@ static int http_get_body(uint8_t s, const char *in, char *out, size_t max_len)
     }
 
     body += 4; // Bỏ qua "\r\n\r\n"
-
     size_t body_len = strlen(body);
     if (body_len >= max_len)
         body_len = max_len - 1;
 
     memcpy(out, body, body_len);
     out[body_len] = '\0';
-
     printf("[HTTP] Socket %d | Extracted body (%u bytes)\n", s, (unsigned)body_len);
     return (int)body_len;
 }
 
 /* ===========================================================
- * /api/status  → Trả trạng thái PSU (cho dashboard)
+ * /api/status → Trả trạng thái PSU (cho dashboard)
  * =========================================================== */
 static void api_status(uint8_t s, void *req)
 {
-    extern float g_vin, g_vout, g_cc, g_temp;
+    psu_data_t psu = psu_data_read();  // ✅ đọc dữ liệu PSU an toàn (thread-safe)
 
-    extern uint16_t g_fault_status;
     char json[256];
-
     snprintf(json, sizeof(json),
              "{"
              "\"vin\":%.2f,"
              "\"vout\":%.2f,"
+             "\"vset\":%.2f,"
              "\"iout\":%.3f,"
+             "\"cc\":%.3f,"
              "\"temp\":%.1f,"
-             "\"status\":%u"
+             "\"fault_raw\":%u,"
+             "\"fan_fail\":%u,"
+             "\"otp\":%u,"
+             "\"ovp\":%u,"
+             "\"olp\":%u,"
+             "\"short_circuit\":%u,"
+             "\"ac_fail\":%u,"
+             "\"op_off\":%u"
              "}",
-             g_vin, g_vout, g_cc, g_temp, g_fault_status);
+             psu.vin, psu.vout, psu.vset, psu.iout, psu.cc, psu.temp,
+             psu.fault.raw,
+             psu.fault.bits.fan_fail,
+             psu.fault.bits.otp,
+             psu.fault.bits.ovp,
+             psu.fault.bits.olp,
+             psu.fault.bits.short_circuit,
+             psu.fault.bits.ac_fail,
+             psu.fault.bits.op_off);
 
     send_json(s, json);
 }
@@ -130,8 +144,6 @@ static void api_network(uint8_t s, void *req)
         }
 
         printf("[WEB] /api/network POST body: %s\n", body);
-
-        // Parse JSON đơn giản
         parse_ip_field(body, "ip", cfg.ip);
         parse_ip_field(body, "mask", cfg.sn);
         parse_ip_field(body, "gw", cfg.gw);
@@ -143,9 +155,7 @@ static void api_network(uint8_t s, void *req)
 
         printf("[CFG] DHCP: %d\n", cfg.dhcp_enable);
 
-        // Cập nhật cấu hình
         app_cfg_set(&cfg);
-
         bool ok = app_cfg_save();
         printf("[FLASH] Save result: %s\n", ok ? "OK" : "FAIL");
 
@@ -154,7 +164,7 @@ static void api_network(uint8_t s, void *req)
             send_json(s, "{\"result\":\"OK\"}");
             printf("[SYS] Config saved. System will reboot in 500ms...\n");
             fflush(stdout);
-            watchdog_reboot(0, 0, 1000);
+            safe_reboot();
         }
         else
         {
@@ -178,13 +188,16 @@ static void api_network(uint8_t s, void *req)
                  cfg.gw[0], cfg.gw[1], cfg.gw[2], cfg.gw[3],
                  cfg.dns[0], cfg.dns[1], cfg.dns[2], cfg.dns[3],
                  cfg.dhcp_enable);
-
         send_json(s, json);
         return;
     }
 
     send_json(s, "{\"error\":\"unsupported method\"}");
 }
+
+/* ===========================================================
+ * /api/device → Trả thông tin thiết bị
+ * =========================================================== */
 static void api_device(uint8_t s, void *req)
 {
     const app_config_t *cfg = app_cfg_get();
@@ -219,7 +232,6 @@ static void api_logs(uint8_t s, void *req)
         "Ethernet link up\n"
         "Web server initialized\n"
         "SNMP Agent running\n";
-
     send_text(s, dummy);
 }
 
@@ -234,15 +246,11 @@ static void api_config(uint8_t s, void *req)
     app_config_t cfg = *app_cfg_get();
     char *p;
 
-    // ======================================================
-    // POST: Cập nhật cấu hình từ body JSON
-    // ======================================================
     if (r->METHOD == METHOD_POST)
     {
         http_get_body(s, r->URI, body, sizeof(body));
         printf("[WEB] /api/config POST body: %s\n", body);
 
-        // --- Parse chuỗi ---
         if ((p = strstr(body, "\"device_name\"")))
             sscanf(p + 15, "%31[^\"]", cfg.device_name);
         if ((p = strstr(body, "\"timezone\"")))
@@ -252,11 +260,10 @@ static void api_config(uint8_t s, void *req)
             char *value_start = strchr(p, ':');
             if (value_start)
             {
-                // Bỏ qua khoảng trắng và dấu "
                 value_start = strchr(value_start, '"');
                 if (value_start)
                 {
-                    value_start++; // Bỏ qua dấu "
+                    value_start++;
                     char *endptr;
                     unsigned long tmp = strtoul(value_start, &endptr, 16);
                     if (endptr != value_start && tmp <= 0xFF)
@@ -283,7 +290,6 @@ static void api_config(uint8_t s, void *req)
         if ((p = strstr(body, "\"psu_overcurrent_A\"")))
             sscanf(p + 20, "%f", &cfg.psu_overcurrent_A);
 
-        // --- Parse ip_snmp an toàn ---
         if ((p = strstr(body, "\"ip_snmp\"")))
         {
             char ip_str[32] = {0};
@@ -295,24 +301,15 @@ static void api_config(uint8_t s, void *req)
                     cfg.snmp_manager_ip[i] = (uint8_t)b[i];
                 printf("[CFG] SNMP Manager IP = %d.%d.%d.%d\n", b[0], b[1], b[2], b[3]);
             }
-            else
-            {
-                printf("[CFG] Invalid ip_snmp field, ignored.\n");
-            }
         }
 
-        // --- Lưu lại cấu hình ---
         app_cfg_set(&cfg);
         app_cfg_save();
-
         send_json(s, "{\"result\":\"OK\"}");
         printf("[WEB] Config updated and saved.\n");
         return;
     }
 
-    // ======================================================
-    // GET: Trả toàn bộ cấu hình hiện tại
-    // ======================================================
     snprintf(json, sizeof(json),
              "{"
              "\"device_name\":\"%s\","

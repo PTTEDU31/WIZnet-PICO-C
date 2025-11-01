@@ -5,14 +5,14 @@
 
 
 #define LED_PIN 25   // LED on-board Pico
-
+#define RESET_PIN 22 // RESET 
 
 // ==============================
 // UART1: Modbus RTU (RS-485)
 // ==============================
 #define MODBUS_UART         uart1
-#define MODBUS_TX_PIN       4       // TX (GPIO0)
-#define MODBUS_RX_PIN       5       // RX (GPIO1)
+#define MODBUS_TX_PIN       5       // TX (GPIO0)
+#define MODBUS_RX_PIN       4       // RX (GPIO1)
 #define RS485_DIR_PIN       6       // DE/RE control pin
 #define MODBUS_BAUDRATE     115200 
 

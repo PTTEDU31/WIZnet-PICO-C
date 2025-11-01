@@ -125,7 +125,7 @@ static const char 	ERROR_REQUEST_PAGE[] = "HTTP/1.1 400 OK\r\nContent-Type: text
  @brief 	Structure of HTTP REQUEST 
  */
 
-#define MAX_URI_SIZE	1461
+#define MAX_URI_SIZE	2048
 // #define MAX_URI_SIZE	512
 
 typedef struct _st_http_request
@@ -139,7 +139,7 @@ typedef struct _st_http_request
 void unescape_http_url(char * url);								/* convert escape character to ascii */
 void parse_http_request(st_http_request *, uint8_t *);			/* parse request from peer */
 void find_http_uri_type(uint8_t *, uint8_t *);					/* find MIME type of a file */
-void make_http_response_head(char *, char, uint32_t);			/* make response header */
+void make_http_response_head(char *, char, uint32_t,uint8_t);			/* make response header */
 uint8_t * get_http_param_value(char* uri, char* param_name);	/* get the user-specific parameter value */
 uint8_t get_http_uri_name(uint8_t * uri, uint8_t * uri_buf);	/* get the requested URI name */
 #ifdef _OLD_

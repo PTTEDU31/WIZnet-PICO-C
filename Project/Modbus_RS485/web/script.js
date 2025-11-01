@@ -11,15 +11,22 @@ async function updateData() {
     document.getElementById("vout").textContent = data.vout.toFixed(2) + " V";
     document.getElementById("iout").textContent = data.iout.toFixed(3) + " A";
     document.getElementById("temp").textContent = data.temp.toFixed(1) + " °C";
-    document.getElementById("status").textContent =
-      "0x" + data.status.toString(16).toUpperCase();
+    document.getElementById("fault_raw").textContent =
+      "0x" + data.fault_raw.toString(16).toUpperCase().padStart(2, "0");
+    document.getElementById("fault_detail").textContent =
+      `FAN:${data.fan_fail ? "⚠️" : "OK"} | ` +
+      `OTP:${data.otp ? "⚠️" : "OK"} | ` +
+      `OVP:${data.ovp ? "⚠️" : "OK"} | ` +
+      `OLP:${data.olp ? "⚠️" : "OK"} | ` +
+      `AC:${data.ac_fail ? "⚠️" : "OK"}`;
   } catch (err) {
-    document.getElementById("status").textContent = "Disconnected";
+    document.getElementById("fault_raw").textContent = "Disconnected";
+    document.getElementById("fault_detail").textContent = "No data";
   } finally {
     spinner.style.display = "none";
   }
 }
-setInterval(updateData, 2000);
+setInterval(updateData, 10000);
 
 // ================== PAGE LOAD ==================
 window.onload = () => {

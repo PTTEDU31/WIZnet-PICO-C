@@ -8,6 +8,7 @@ add_executable(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME}
         pico_stdlib
+        hardware_pwm
         hardware_spi
         hardware_dma
         hardware_pio
@@ -32,6 +33,8 @@ target_include_directories(${TARGET_NAME} PRIVATE
 # Ethernet
 add_subdirectory(devices/eth)
 add_subdirectory(devices/modbus)
+add_subdirectory(devices/psu_data)
+add_subdirectory(devices/led_status)
 add_subdirectory(config)
 
 pico_enable_stdio_usb(${TARGET_NAME} 0)
