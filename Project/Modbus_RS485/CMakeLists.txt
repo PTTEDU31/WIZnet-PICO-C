@@ -37,6 +37,8 @@ add_subdirectory(devices/psu_data)
 add_subdirectory(devices/led_status)
 add_subdirectory(config)
 
+pico_generate_pio_header(${TARGET_NAME} ${CMAKE_CURRENT_LIST_DIR}/led_status.pio)
+
 pico_enable_stdio_usb(${TARGET_NAME} 0)
 pico_enable_stdio_uart(${TARGET_NAME} 1)
 

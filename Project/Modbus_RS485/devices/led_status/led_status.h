@@ -48,4 +48,6 @@ void led_set_state(device_state_t new_state);
  */
 device_state_t led_get_state(void);
 
+
+void led_set_blink_hz(float freq_hz);
 #endif // LED_STATUS_H
