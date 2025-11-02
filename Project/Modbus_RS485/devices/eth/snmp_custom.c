@@ -35,15 +35,24 @@ static void get_output_current(void *ptr, uint8_t *len)
 
 static void get_set_voltage(void *ptr, uint8_t *len)
 {
-    int32_t val = (int32_t)(g_vset * 100);
+    psu_data_t psu = psu_data_read();
+    int32_t val = (int32_t)(psu.vset * 100);
     *(int32_t *)ptr = val;
     *len = sizeof(val);
 }
 
 static void get_temp(void *ptr, uint8_t *len)
 {
-    *(uint16_t *)ptr = g_fault_status;
-    *len = sizeof(g_fault_status);
+    psu_data_t psu = psu_data_read();
+    int32_t val = (int32_t)(psu.temp * 100);
+    *(int32_t *)ptr = val;
+    *len = sizeof(val);
+}
+static void get_fault_flags(void *ptr, uint8_t *len)
+{
+    psu_data_t psu = psu_data_read();
+    uint32_t val = (uint32_t)(psu.fault.raw);
+    *(uint32_t *)ptr = val;
 }
 
 /* ===================================================================== */
@@ -53,40 +62,49 @@ static uint8_t OID_VIN[16], OID_VOUT[16], OID_VSET[16], OID_IOUT[16], OID_FAULT[
 
 dataEntryType snmpData[] =
 {
-    // VIN
-    {10, {0x2b,6,1,4,1,0x86,0x9F,0x4F,1,1},
-     SNMPDTYPE_INTEGER, 4, {""},
-     get_input_voltage, NULL},
-
-    // VOUT
-    {10, {0x2b,6,1,4,1,0x86,0x9F,0x4F,1,2},
-     SNMPDTYPE_INTEGER, 4, {""},
-     get_output_voltage, NULL},
-
-    // VSET
-    {10, {0x2b,6,1,4,1,0x86,0x9F,0x4F,1,3},
-     SNMPDTYPE_INTEGER, 4, {""},
-     get_set_voltage, NULL},
-
-    // CC
-    {10, {0x2b,6,1,4,1,0x86,0x9F,0x4F,1,4},
-     SNMPDTYPE_INTEGER, 4, {""},
-     get_output_current, NULL},
-
-    // Fault Flags
-    {10, {0x2b,6,1,4,1,0x86,0x9F,0x4F,1,5},
-     SNMPDTYPE_INTEGER, 2, {""},
-     get_fault_flags, NULL},
+  {0,{0}, SNMPDTYPE_INTEGER, 4, {""}, get_input_voltage,  NULL},  // VIN
+  {0,{0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_voltage, NULL},  // VOUT
+  {0,{0}, SNMPDTYPE_INTEGER, 4, {""}, get_set_voltage,    NULL},  // VSET
+  {0,{0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_current, NULL},  // IOUT
+  {0,{0}, SNMPDTYPE_INTEGER, 4, {""}, get_fault_flags,    NULL},  // FAULT
 };
 const int32_t maxData = (int32_t)(sizeof(snmpData)/sizeof(snmpData[0]));
 
-/* =========================== */
-/*     Trap Sending Logic      */
-/* =========================== */
-static uint16_t last_fault = 0xFFFF;
+/* ===================================================================== */
+/*                        OID UTILITIES (BER-128)                         */
+/* ===================================================================== */
+static uint8_t ber_encode_base128(uint32_t v, uint8_t *out) {
+  uint8_t tmp[5]; int n=0;
+  do { tmp[n++] = v & 0x7F; v >>= 7; } while (v);
+  for (int i=n-1, j=0; i>=0; --i, ++j) out[j] = tmp[i] | (i?0x80:0x00);
+  return (uint8_t)n;
+}
+static uint8_t write_enterprise_root(uint8_t *buf) {
+  /* 1.3.6.1.4.1.<ENTERPRISE_ID> */
+  uint8_t *p=buf;
+  *p++=0x2b; *p++=6; *p++=1; *p++=4; *p++=1;
+  p += ber_encode_base128(ENTERPRISE_ID, p);
+  return (uint8_t)(p-buf);
+}
+static uint8_t build_oid_branch(uint8_t *buf, uint8_t leaf) {
+  uint8_t len = write_enterprise_root(buf);
+  buf[len++] = 1;      // group 1 (PSU basic)
+  buf[len++] = leaf;   // index
+  return len;
+}
+void snmp_custom_init_oids(void) {
+  snmpData[0].oidlen = build_oid_branch(OID_VIN,   1); memcpy(snmpData[0].oid, OID_VIN,   snmpData[0].oidlen);
+  snmpData[1].oidlen = build_oid_branch(OID_VOUT,  2); memcpy(snmpData[1].oid, OID_VOUT,  snmpData[1].oidlen);
+  snmpData[2].oidlen = build_oid_branch(OID_VSET,  3); memcpy(snmpData[2].oid, OID_VSET,  snmpData[2].oidlen);
+  snmpData[3].oidlen = build_oid_branch(OID_IOUT,  4); memcpy(snmpData[3].oid, OID_IOUT,  snmpData[3].oidlen);
+  snmpData[4].oidlen = build_oid_branch(OID_FAULT, 5); memcpy(snmpData[4].oid, OID_FAULT, snmpData[4].oidlen);
+}
+__attribute__((constructor)) static void _snmp_custom_ctor(void){ snmp_custom_init_oids(); }
 
-static void snmp_send_trap_custom(uint8_t *managerIP, uint8_t *agentIP,
-                                  uint8_t trap_num)
+/* ===================================================================== */
+/*                         TRAP SEND WRAPPER                              */
+/* ===================================================================== */
+void snmp_send_trap_custom(uint8_t *managerIP, uint8_t *agentIP, uint8_t trap_code)
 {
   dataEntryType enterprise_oid = {0};
   enterprise_oid.oidlen = write_enterprise_root(enterprise_oid.oid);
@@ -114,46 +132,100 @@ void snmp_trap_state_reset(void){ last_fault = 0xFFFF; }
 
 void snmp_process_fault_trap(uint8_t *managerIP, uint8_t *agentIP)
 {
-    uint16_t new_fault = g_fault_status;
-    fault_flags_t f = g_fault_flags;
+  // uint16_t new_fault = g_fault_status;
+  // fault_flags_t f    = g_fault_flags;
 
-    if (last_fault == 0xFFFF) { // Lần đầu
-        last_fault = new_fault;
-        return;
-    }
+  // if (last_fault == 0xFFFF) { last_fault = new_fault; return; }
+  // uint16_t changed = (uint16_t)(last_fault ^ new_fault);
+  // if (!changed) return;
 
-    uint16_t changed = last_fault ^ new_fault;
-    if (!changed) return;
+  // printf("[SNMP] Fault changed: old=0x%04X new=0x%04X\n", last_fault, new_fault);
 
-    printf("[SNMP] Fault changed: old=0x%04X new=0x%04X\n", last_fault, new_fault);
+  // /* AC_FAIL (Power Failure/Restored) */
+  // if (changed & (1u<<BIT_ACFAIL)) {
+  //   if (f.ac_fail) snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_FAILURE);
+  //   else           snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_RESTORED);
+  // }
+  // /* OP_OFF (Output Disabled/Restored) */
+  // if (changed & (1u<<BIT_OPOFF)) {
+  //   if (f.op_off) snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_DISABLED);
+  //   else          snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_RESTORED);
+  // }
+  // /* OTP set/cleared */
+  // if (changed & (1u<<BIT_OTP)) {
+  //   if (f.otp) snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_TEMPERATURE);
+  //   else       snmp_send_trap_custom(managerIP, agentIP, TRAP_OTP_CLEARED);
+  // }
+  // /* OLP set/cleared */
+  // if (changed & (1u<<BIT_OLP)) {
+  //   if (f.olp) snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_CURRENT);
+  //   else       snmp_send_trap_custom(managerIP, agentIP, TRAP_OCP_CLEARED);
+  // }
 
-    if ((changed & (1 << 1)) && f.otp)
-        snmp_send_trap_custom(managerIP, agentIP, 3); // overTemperatureTrap
-
-    if ((changed & (1 << 3)) && f.olp)
-        snmp_send_trap_custom(managerIP, agentIP, 4); // overCurrentTrap
-
-    if (changed & ((1 << 5) | (1 << 6))) {
-        if (f.ac_fail || f.op_off)
-            snmp_send_trap_custom(managerIP, agentIP, 1); // powerFailureTrap
-        else
-            snmp_send_trap_custom(managerIP, agentIP, 2); // powerRestoredTrap
-    }
-
-    last_fault = new_fault;
+  // last_fault = new_fault;
 }
 
-/* =========================== */
-/*     Init Default Values     */
-/* =========================== */
-void initTable(void)
-{
-    g_vin  = 0;
-    g_vout = 0;
-    g_vset = 0;
-    g_cc   = 0;
-    g_fault_status = 0;
-    memset(&g_fault_flags, 0, sizeof(g_fault_flags));
+/* ===================================================================== */
+/*            TRAP: SPEC 5.1–5.2 (runtime / SOC / temp / misc)           */
+/* ===================================================================== */
+
+/* Tick ms (dựa trên SNMP time tick 10ms trong snmp.c) */
+static inline uint32_t now_ms_for_trap(void){
+  extern uint32_t getSNMPTimeTick(void);
+  return getSNMPTimeTick() * 10U;
+}
+#define MAX_TRAP_CODE 512
+static uint32_t g_last_sent_ms[MAX_TRAP_CODE];
+
+static inline uint8_t can_send_es(uint16_t code, uint32_t tnow){
+  if (code >= MAX_TRAP_CODE) return 0;
+  if (tnow - g_last_sent_ms[code] < TRAP_RATELIMIT_MS) return 0;
+  g_last_sent_ms[code] = tnow;
+  return 1;
+}
+static inline void send_es(uint8_t *m, uint8_t *a, uint16_t code){
+  uint32_t tnow = now_ms_for_trap();
+  if (can_send_es(code, tnow)) snmp_send_trap_custom(m, a, (uint8_t)code);
+}
+
+/* Debounce cho 1 ngưỡng */
+typedef struct { uint8_t latched, cnt_set, cnt_clr; } thr_t;
+static thr_t thr_run60, thr_run30, thr_run15, thr_run5;
+static thr_t thr_soc30, thr_soc20, thr_soc10;
+static thr_t thr_tHigh, thr_tCrit;
+
+/* Trạng thái đơn */
+static uint8_t st_ac_loss=0, st_overload=0, st_hw_fault=0, st_bms_fault=0, st_emergency=0, st_full_charge=0;
+
+static inline uint8_t debounce(thr_t *t, uint8_t set_cond, uint8_t clr_cond){
+  if (!t->latched){
+    if (set_cond){
+      if (t->cnt_set < TRAP_DEBOUNCE_SAMPLES) t->cnt_set++;
+      t->cnt_clr = 0;
+      if (t->cnt_set >= TRAP_DEBOUNCE_SAMPLES){ t->cnt_set=0; t->latched=1; return 1; }
+    }else{ t->cnt_set=0; t->cnt_clr=0; }
+  }else{
+    if (clr_cond){
+      if (t->cnt_clr < TRAP_DEBOUNCE_SAMPLES) t->cnt_clr++;
+      t->cnt_set=0;
+      if (t->cnt_clr >= TRAP_DEBOUNCE_SAMPLES){ t->cnt_clr=0; t->latched=0; return 2; }
+    }else{ t->cnt_clr=0; t->cnt_set=0; }
+  }
+  return 0;
+}
+
+void snmp_trap_policy_reset(void){
+  memset(&thr_run60,0,sizeof(thr_run60));
+  memset(&thr_run30,0,sizeof(thr_run30));
+  memset(&thr_run15,0,sizeof(thr_run15));
+  memset(&thr_run5 ,0,sizeof(thr_run5 ));
+  memset(&thr_soc30,0,sizeof(thr_soc30));
+  memset(&thr_soc20,0,sizeof(thr_soc20));
+  memset(&thr_soc10,0,sizeof(thr_soc10));
+  memset(&thr_tHigh,0,sizeof(thr_tHigh));
+  memset(&thr_tCrit,0,sizeof(thr_tCrit));
+  st_ac_loss = st_overload = st_hw_fault = st_bms_fault = st_emergency = st_full_charge = 0;
+  memset(g_last_sent_ms, 0, sizeof(g_last_sent_ms));
 }
 
 /* Mọi thứ an toàn? -> bắn SystemNormal */

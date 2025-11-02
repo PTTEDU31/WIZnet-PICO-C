@@ -158,11 +158,11 @@ void core1_entry(void)
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VOUT, &psu_local.vout, 0.01f);
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, RED_TEMP,      &psu_local.temp, 0.1f);
 
-            // Fault & SNMP trap
-            uint16_t fault_raw = 0;
-            modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);
-            psu_data_update(&psu_local);
-            snmp_process_fault_trap(managerIP, agentIP);
+            // // Fault & SNMP trap
+            // uint16_t fault_raw = 0;
+            // modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);
+            // psu_data_update(&psu_local);
+            // snmp_process_fault_trap(managerIP, agentIP);
         }
 
         // -------------------------------------------------------
