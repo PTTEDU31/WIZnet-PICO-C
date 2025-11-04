@@ -12,7 +12,7 @@ extern "C" {
 #define PORT_SNMP_TRAP				162
 
 #define SNMP_V1						0
-
+#define SNMP_V2C  1
 #define MAX_OID						12
 #define MAX_STRING					64
 #define MAX_SNMPMSG_LEN				512
@@ -59,6 +59,16 @@ extern "C" {
 #define SNMPTRAP_AUTHENTICATION		0x04	// Generic trap-type 4: Authentication Failure
 #define SNMPTRAP_EGPNEIGHBORLOSS	0x05	// Generic trap-type 5: EGP Neighbor Loss
 
+
+// SNMPv2c PDU types
+#define GET_BULK_REQUEST   0xA5
+#define INFORM_REQUEST     0xA6
+#define SNMPV2_TRAP        0xA7
+
+// Mở rộng macro hợp lệ (tạm thời vẫn chưa xử lý GetBulk thì chưa thêm)
+#define VALID_REQUEST(x)   ((x==GET_REQUEST)||(x==GET_NEXT_REQUEST)||(x==SET_REQUEST) /*|| (x==GET_BULK_REQUEST)*/)
+
+
 // Macros
 #define COPY_SEGMENT(x) \
 { \
@@ -92,6 +102,7 @@ struct messageStruct {
 	uint8_t buffer[MAX_SNMPMSG_LEN];
 	int32_t len;
 	int32_t index;
+	uint8_t resp_version_index;
 };
 
 typedef struct {
@@ -109,7 +120,9 @@ typedef struct {
 void snmpd_init(uint8_t * managerIP, uint8_t * agentIP, uint8_t sn_agent, uint8_t sn_trap);
 int32_t snmpd_run(void);
 int32_t snmp_sendTrap(uint8_t * managerIP, uint8_t * agentIP, int8_t* community, dataEntryType enterprise_oid, uint32_t genericTrap, uint32_t specificTrap, uint32_t va_count, ...);
-
+int32_t snmp_sendTrapV2(uint8_t *managerIP, int8_t *community,
+                        const uint8_t *trap_oid, uint8_t trap_oid_len,
+                        dataEntryType *extra_vbs, uint32_t extra_count);
 // SNMP Time handler functions
 void SNMP_time_handler(void);
 uint32_t getSNMPTimeTick(void);

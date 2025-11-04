@@ -42,6 +42,8 @@ void eth_1ms_tick(void)
     g_msec_cnt++;
     if (g_msec_cnt % 1000 == 0)
         DHCP_time_handler();
+    if (g_msec_cnt % 10 == 0)
+        SNMP_time_handler();
 }
 
 uint32_t millis(void)
@@ -122,7 +124,7 @@ void eth_init(void)
     /* ====== SNMP Initialization ====== */
 
     memcpy(managerIP, cfg->snmp_manager_ip, 4); // 🔄 dùng IP từ config
-    agentIP = g_net_info.ip;           // IP thực tế của board
+    agentIP = g_net_info.ip;                    // IP thực tế của board
 
     printf("[SNMP] Manager IP: %d.%d.%d.%d | Agent IP: %d.%d.%d.%d\n",
            managerIP[0], managerIP[1], managerIP[2], managerIP[3],

@@ -1,0 +1,99 @@
+VF-PSU-MIB DEFINITIONS ::= BEGIN
+
+IMPORTS
+    MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE, enterprises, Integer32
+        FROM SNMPv2-SMI
+    DisplayString
+        FROM SNMPv2-TC;
+
+vfPsuMib MODULE-IDENTITY
+    LAST-UPDATED "202511040000Z"
+    ORGANIZATION "VF Power Systems"
+    CONTACT-INFO "support@vf.vn"
+    DESCRIPTION "MIB for VF PSU / Battery Monitoring traps."
+    ::= { enterprises 99999 }
+
+-- Root OID tree
+psuObjects      OBJECT IDENTIFIER ::= { vfPsuMib 1 }
+psuTraps        OBJECT IDENTIFIER ::= { vfPsuMib 10 }
+
+-- ======================================================
+-- Common objects (static / polled values)
+-- ======================================================
+
+psuBatteryVoltage OBJECT-TYPE
+    SYNTAX      INTEGER
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Battery voltage in 0.1V."
+    ::= { psuObjects 1 }
+
+psuBatterySOC OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Battery State of Charge (%)"
+    ::= { psuObjects 2 }
+
+psuBatteryRuntimeMinutes OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Estimated battery runtime in minutes."
+    ::= { psuObjects 3 }
+
+trapSeverity OBJECT-TYPE
+    SYNTAX      INTEGER { info(1), warning(2), critical(3), normal(4) }
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Severity level for each trap."
+    ::= { psuObjects 99 }
+
+-- ======================================================
+-- Notifications (Traps)
+-- Mỗi trap thêm OBJECTS { trapSeverity } để SNMP manager hiểu mức độ.
+-- ======================================================
+
+trapACLoss NOTIFICATION-TYPE
+    OBJECTS { psuBatteryVoltage, psuBatterySOC, trapSeverity }
+    STATUS  current
+    DESCRIPTION "AC power lost, device running on battery."
+    ::= { psuTraps 100 }
+
+trapACRestored NOTIFICATION-TYPE
+    OBJECTS { trapSeverity }
+    STATUS  current
+    DESCRIPTION "AC power restored."
+    ::= { psuTraps 101 }
+
+trapBatteryRuntime30Min NOTIFICATION-TYPE
+    OBJECTS { psuBatteryVoltage, psuBatterySOC, psuBatteryRuntimeMinutes, trapSeverity }
+    STATUS  current
+    DESCRIPTION "Battery runtime below 30 minutes."
+    ::= { psuTraps 103 }
+
+trapHwFault NOTIFICATION-TYPE
+    OBJECTS { trapSeverity }
+    STATUS  current
+    DESCRIPTION "Hardware fault detected."
+    ::= { psuTraps 113 }
+
+trapBmsFault NOTIFICATION-TYPE
+    OBJECTS { trapSeverity }
+    STATUS  current
+    DESCRIPTION "BMS fault detected."
+    ::= { psuTraps 114 }
+
+trapEmergencyShutdown NOTIFICATION-TYPE
+    OBJECTS { trapSeverity }
+    STATUS  current
+    DESCRIPTION "Emergency shutdown condition (battery low)."
+    ::= { psuTraps 115 }
+
+trapBatteryFullCharged NOTIFICATION-TYPE
+    OBJECTS { trapSeverity }
+    STATUS  current
+    DESCRIPTION "Battery fully charged."
+    ::= { psuTraps 117 }
+
+END

@@ -89,12 +89,47 @@ void safe_reboot(void)
 // Core1 Entry (Modbus Polling)
 // ===========================================================
 
+/* Gọi nhiều lần để vượt debounce/rate-limit một cách nhanh gọn */
+static inline void step_spec(uint8_t *mgr, uint8_t *agt,
+                             uint8_t ac, float vbat, float soc, float rt_min, float tc,
+                             uint8_t overload, uint8_t hwf, uint8_t bmsf,
+                             int repeats, int delay_ms)
+{
+    for (int i = 0; i < repeats; ++i)
+    {
+        snmp_trap_process_spec(mgr, agt, ac, vbat, soc, rt_min, tc, overload, hwf, bmsf);
+        sleep_ms(delay_ms);
+    }
+}
+
+/* Hàm TEST SNMP – giả lập đủ kịch bản trap */
+void snmp_trap_test_demo(uint8_t managerIP[4])
+{
+    printf("\n[SNMP TEST] Sending demo traps with Severity...\n");
+    printf("[SNMP] Tick = %lu (%lu s uptime)\n", getSNMPTimeTick(), getSNMPTimeTick() / 100);
+
+    snmp_send_trap_custom(managerIP, NULL, 103); // Warning
+    sleep_ms(500);
+    printf("[SNMP] Tick = %lu  (uptime %.1f s)\n",
+           getSNMPTimeTick(),
+           getSNMPTimeTick() / 100.0f);
+    snmp_send_trap_custom(managerIP, NULL, 113); // Critical
+    sleep_ms(500);
+    printf("[SNMP] Tick = %lu  (uptime %.1f s)\n",
+           getSNMPTimeTick(),
+           getSNMPTimeTick() / 100.0f);
+    snmp_send_trap_custom(managerIP, NULL, 101); // Normal
+
+    printf("[SNMP TEST] Done.\n");
+}
+
 void core1_entry(void)
 {
     // ===========================================================
     // 1️⃣ Khởi tạo an toàn vùng flash (tránh xung đột core0)
     // ===========================================================
     flash_safe_execute_core_init();
+    sleep_ms(10000);
 
     // ===========================================================
     // 2️⃣ Khởi tạo UART0 RS485
@@ -127,6 +162,11 @@ void core1_entry(void)
     uint32_t last_led = 0;
     uint32_t last_modbus = 0;
 
+    uint8_t mgr[4] = {cfg->snmp_manager_ip[0], cfg->snmp_manager_ip[1], cfg->snmp_manager_ip[2], cfg->snmp_manager_ip[3]};
+    uint8_t agt[4] = {cfg->ip[0], cfg->ip[1], cfg->ip[2], cfg->ip[3]};
+    snmp_trap_test_demo(mgr);
+    // snmp_trap_quick_test(mgr, agt);
+
     // ===========================================================
     // 6️⃣ Vòng lặp chính Core1
     // ===========================================================
@@ -146,7 +186,7 @@ void core1_entry(void)
         // -------------------------------------------------------
         // (B) Modbus polling định kỳ
         // -------------------------------------------------------
-        if (now - last_modbus >= 300)   // 300ms/poll
+        if (now - last_modbus >= 300) // 300ms/poll
         {
             last_modbus = now;
 
@@ -154,21 +194,21 @@ void core1_entry(void)
             psu_data_t psu_local = {0};
 
             // Ví dụ đọc một vài thanh ghi cơ bản
-            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VIN,  &psu_local.vin, 0.1f);
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VIN, &psu_local.vin, 0.1f);
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VOUT, &psu_local.vout, 0.01f);
-            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, RED_TEMP,      &psu_local.temp, 0.1f);
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, RED_TEMP, &psu_local.temp, 0.1f);
 
             // // Fault & SNMP trap
-            // uint16_t fault_raw = 0;
-            // modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);
-            // psu_data_update(&psu_local);
+            uint16_t fault_raw = 0;
+            modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);
+            psu_data_update(&psu_local);
             // snmp_process_fault_trap(managerIP, agentIP);
         }
 
         // -------------------------------------------------------
         // (C) LED hiển thị trạng thái (non-blocking)
         // -------------------------------------------------------
-        led_update();
+        // led_update();
 
         // -------------------------------------------------------
         // (D) Debug pattern: đổi trạng thái LED 5s một lần
@@ -190,6 +230,7 @@ void core1_entry(void)
 // ===========================================================
 // Main
 // ===========================================================
+
 int main(void)
 {
     set_sys_clock_khz(200000, true);
@@ -198,13 +239,12 @@ int main(void)
     psu_data_init();
 
     // Watchdog 4s
-    watchdog_enable(4000, true);
+    // watchdog_enable(4000, true);
+
+    flash_safe_execute_core_init();
 
     multicore_reset_core1();
     multicore_launch_core1(core1_entry);
-    
-    flash_safe_execute_core_init();
-
     printf("\r\n=== RP2040 Modbus PSU Monitor + W5500 (Web + SNTP + DHCP) ===\r\n");
 
     if (!app_cfg_init())
@@ -245,11 +285,11 @@ int main(void)
             uint32_t hb = g_core1_heartbeat_ms;
             if (hb != 0 && (now - hb) > CORE1_HB_TIMEOUT_MS)
             {
-                printf("[WDT] Core1 heartbeat timeout (> %d ms). Restarting core1...\n",
-                       CORE1_HB_TIMEOUT_MS);
-                multicore_reset_core1();
-                sleep_ms(10);
-                multicore_launch_core1(core1_entry);
+                // printf("[WDT] Core1 heartbeat timeout (> %d ms). Restarting core1...\n",
+                //        CORE1_HB_TIMEOUT_MS);
+                // multicore_reset_core1();
+                // sleep_ms(10);
+                // multicore_launch_core1(core1_entry);
             }
         }
 

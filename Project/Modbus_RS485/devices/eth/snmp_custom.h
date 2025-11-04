@@ -81,7 +81,7 @@ typedef enum {
 
 /* ======= Hysteresis / debounce / rate-limit ======= */
 #define TRAP_DEBOUNCE_SAMPLES   5
-#define TRAP_RATELIMIT_MS       30000UL
+#define TRAP_RATELIMIT_MS       00000UL // for test
 
 #define RUNTIME_HYS_MIN         2.0f
 #define SOC_HYS_PCT             2.0f
@@ -97,6 +97,7 @@ extern const int32_t maxData;
 void snmp_custom_init_oids(void);
 void initial_Trap(uint8_t *managerIP, uint8_t *agentIP);
 void snmp_send_trap_custom(uint8_t *managerIP, uint8_t *agentIP, uint8_t trap_code);
+uint8_t write_enterprise_root(uint8_t *buf);
 /* Traps */
 void trap_powerFailure(uint8_t *managerIP, uint8_t *agentIP);
 void trap_powerRestored(uint8_t *managerIP, uint8_t *agentIP);
