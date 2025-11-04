@@ -17,6 +17,32 @@ extern "C" {
 #define COMMUNITY       "public"
 #define COMMUNITY_SIZE  (strlen(COMMUNITY))
 
+
+// OID layout: 1.3.6.1.4.1.<enterprise>.1.<GROUP>.<LEAF>.0
+// Gợi ý nhóm:
+//  - GROUP_MEAS = 1: các đo lường PSU (VIN/VOUT/VSET/IOUT)
+//  - GROUP_BATT = 2: các thông số Battery (VBAT/SOC/Capacity/Remain/Runtime/Temp/WarnFlags)
+
+#define GROUP_MEAS   1
+#define GROUP_BATT   2
+
+// ===== MEAS leaves =====
+#define LEAF_VIN     1
+#define LEAF_VOUT    2
+#define LEAF_VSET    3
+#define LEAF_IOUT    4
+
+// ===== BATT leaves =====
+#define LEAF_BAT_V   1   // VBAT (0.01V)
+#define LEAF_BAT_SOC 2   // SOC (0.1%)
+#define LEAF_BAT_CAP 3   // Capacity Ah (0.01Ah)
+#define LEAF_BAT_REM 4   // Remaining Ah (0.01Ah)
+#define LEAF_BAT_RT  5   // Runtime (minutes)
+#define LEAF_BAT_TMP 6   // Battery Temp (0.01°C)
+// #define LEAF_CHG_MD  7 // Charger mode (enum) — nếu bật lại
+#define LEAF_BAT_WRN 8   // Warn flags (bitmask)
+
+
 // /* ===========================
 //  * Global monitored variables
 //  * =========================== */

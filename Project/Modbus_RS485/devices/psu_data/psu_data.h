@@ -5,7 +5,7 @@
 #include "pico/sync.h"
 
 // =============================================================
-// Fault flags (7 lỗi, gói gọn trong 1 byte bitfield)
+// Fault flags (7 errors, packed in 1 byte bitfield)
 // =============================================================
 typedef union
 {
@@ -30,12 +30,12 @@ typedef union
 {
     struct
     {
-        uint8_t charging      : 1;  // Đang sạc
-        uint8_t discharging   : 1;  // Đang xả
-        uint8_t full          : 1;  // Đầy pin
-        uint8_t low           : 1;  // Pin yếu (< 20%)
-        uint8_t critical      : 1;  // Sắp cạn (< 10%)
-        uint8_t bms_fault     : 1;  // Lỗi BMS
+        uint8_t charging      : 1;  // Charging
+        uint8_t discharging   : 1;  // Discharging
+        uint8_t full          : 1;  // Full (100%)
+        uint8_t low           : 1;  // Low (< 20%)
+        uint8_t critical      : 1;  // Critical (< 10%)
+        uint8_t bms_fault     : 1;  // BMS fault
         uint8_t reserved      : 2;
     } bits;
     uint8_t raw;
@@ -69,13 +69,35 @@ typedef struct
 // PSU Data module API
 // =============================================================
 
+/**
+ * Initialize PSU data module
+ */
 void psu_data_init(void);
+
+/**
+ * Update all PSU data (thread-safe)
+ * Auto-calculates SOC and runtime if needed
+ */
 void psu_data_update(const psu_data_t *new_data);
+
+/**
+ * Set fault flags
+ */
 void psu_data_set_fault(fault_flags_t fault);
+
+/**
+ * Set battery flags
+ */
 void psu_data_set_batt_flags(battery_flags_t flags);
+
+/**
+ * Read snapshot of current data (thread-safe)
+ */
 psu_data_t psu_data_read(void);
 
-// PSU getters
+// =============================================================
+// PSU Quick Getters
+// =============================================================
 float psu_read_vin(void);
 float psu_read_vout(void);
 float psu_read_iout(void);
@@ -84,7 +106,9 @@ float psu_read_vset(void);
 float psu_read_cc(void);
 uint8_t psu_read_fault_raw(void);
 
-// Battery getters
+// =============================================================
+// Battery Quick Getters
+// =============================================================
 float psu_read_batt_voltage(void);
 float psu_read_batt_current(void);
 float psu_read_batt_soc(void);
@@ -92,7 +116,35 @@ float psu_read_batt_runtime(void);
 float psu_read_batt_capacity(void);
 uint8_t psu_read_batt_flags_raw(void);
 
-// Runtime calculator
+// =============================================================
+// Calculation Functions
+// =============================================================
+
+/**
+ * Calculate battery runtime in minutes (SPEC 3.1)
+ * @param capacity_ah - Battery capacity in Ah
+ * @param soc_percent - Current state of charge (0-100%)
+ * @param load_current - Load current in A
+ * @return Runtime in minutes
+ */
 float psu_calculate_runtime_minutes(float capacity_ah, float soc_percent, float load_current);
+
+/**
+ * Convert voltage to SOC% (uses configured battery type)
+ * @param voltage - Battery voltage in V
+ * @return SOC percentage (0-100%)
+ */
+float lifepo4_voltage_to_soc(float voltage);
+
+/**
+ * Assess battery status (1=normal, 2=warning, 3=critical, 4=emergency)
+ */
+uint8_t psu_assess_battery_status(void);
+
+/**
+ * Check if emergency shutdown is required
+ * @return 1 if should shutdown, 0 otherwise
+ */
+uint8_t psu_should_emergency_shutdown(void);
 
 #endif // PSU_DATA_H

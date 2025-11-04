@@ -20,7 +20,7 @@ typedef struct
 static app_config_t g_cfg;
 
 // ===== CRC =====
-static uint32_t  __not_in_flash_func (crc32_update)(uint32_t c, const void *data, size_t len)
+static uint32_t __not_in_flash_func(crc32_update)(uint32_t c, const void *data, size_t len)
 {
     const uint8_t *p = (const uint8_t *)data;
     c = ~c;
@@ -41,6 +41,39 @@ static bool __not_in_flash_func(cfg_is_valid)(const cfg_image_t *img)
         return false;
     uint32_t crc = crc32_update(0, &img->cfg, sizeof(app_config_t));
     return (crc == img->crc32);
+}
+
+void psu_profile_apply_defaults(psu_config_t *p)
+{
+    if (!p)
+        return;
+
+    // Giá trị mặc định an toàn (lead-acid/AGM thường dùng).
+    // Bạn có thể tinh chỉnh theo profile SOC thực tế hoặc loại hóa học cụ thể.
+    switch (p->battery_type)
+    {
+    case BATTERY_12V:
+        p->voltage_cutoff_low = 10.8f; // emergency
+        p->voltage_warning = 11.6f;    // ~30% SOC
+        p->voltage_critical = 11.3f;   // ~20% SOC
+        break;
+    case BATTERY_24V:
+        p->voltage_cutoff_low = 21.6f;
+        p->voltage_warning = 23.2f;
+        p->voltage_critical = 22.6f;
+        break;
+    case BATTERY_36V:
+        p->voltage_cutoff_low = 32.4f;
+        p->voltage_warning = 34.8f;
+        p->voltage_critical = 33.9f;
+        break;
+    case BATTERY_48V:
+    default:
+        p->voltage_cutoff_low = 43.2f;
+        p->voltage_warning = 46.4f;
+        p->voltage_critical = 45.2f;
+        break;
+    }
 }
 
 // ===== Default values =====
@@ -86,6 +119,28 @@ void app_cfg_reset_default(void)
     g_cfg.hysteresis_pct = 2.0f;
     g_cfg.debounce_ms = 1000;
 
+    // Tự apply thresholds theo battery_type
+    psu_profile_apply_defaults(&g_cfg.psu);
+
+    // Trap flags mặc định (bật tất cả cảnh báo thời gian + SOC)
+    g_cfg.psu.warning_60min_enabled = 1;
+    g_cfg.psu.warning_30min_enabled = 1;
+    g_cfg.psu.warning_15min_enabled = 1;
+    g_cfg.psu.warning_5min_enabled = 1;
+    g_cfg.psu.warning_soc30_enabled = 1;
+    g_cfg.psu.warning_soc20_enabled = 1;
+    g_cfg.psu.warning_soc10_enabled = 1;
+
+    // Site & SNMP trap dest
+    strcpy(g_cfg.psu.site_identifier, "Building-5-IDF2");
+    strcpy(g_cfg.psu.snmp_trap_dest, "192.168.137.1"); // có thể là IP hoặc hostname
+    g_cfg.psu.snmp_trap_port = 162;
+
+    // Advanced calib
+    g_cfg.psu.current_sensor_offset = 0.0f;
+    g_cfg.psu.voltage_sensor_scale = 1.000f;
+    g_cfg.psu.enable_auto_shutdown = 1;
+
     strcpy(g_cfg.device_name, "PSU-Monitor");
     strcpy(g_cfg.uuid, "00000000-0000-0000-0000-000000000000");
     g_cfg.timezone = +7;
@@ -95,15 +150,17 @@ void app_cfg_reset_default(void)
     g_cfg.ota_enable = 0;
 }
 // This function will be called when it's safe to call flash_range_erase
-static void __not_in_flash_func(call_flash_range_erase)(void *param) {
+static void __not_in_flash_func(call_flash_range_erase)(void *param)
+{
     uint32_t offset = (uint32_t)param;
     flash_range_erase(offset, FLASH_SECTOR_SIZE);
 }
 
 // This function will be called when it's safe to call flash_range_program
-static void __not_in_flash_func(call_flash_range_program)(void *param) {
-    uint32_t offset = ((uintptr_t*)param)[0];
-    const uint8_t *data = (const uint8_t *)((uintptr_t*)param)[1];
+static void __not_in_flash_func(call_flash_range_program)(void *param)
+{
+    uint32_t offset = ((uintptr_t *)param)[0];
+    const uint8_t *data = (const uint8_t *)((uintptr_t *)param)[1];
     flash_range_program(offset, data, FLASH_PAGE_SIZE);
 }
 
@@ -112,21 +169,23 @@ bool __not_in_flash_func(app_cfg_save)(void)
 {
     cfg_image_t img;
     img.magic = CFG_MAGIC;
-    img.ver   = CFG_VER;
-    img.len   = sizeof(app_config_t);
-    img.cfg   = g_cfg;
+    img.ver = CFG_VER;
+    img.len = sizeof(app_config_t);
+    img.cfg = g_cfg;
     img.crc32 = crc32_update(0, &img.cfg, sizeof(app_config_t));
 
     printf("\n[FLASH] Saving config via flash_safe_execute()...\n");
 
     int rc = flash_safe_execute(call_flash_range_erase, (void *)CFG_FLASH_OFFSET, UINT32_MAX);
-    if (rc != PICO_OK) {
+    if (rc != PICO_OK)
+    {
         printf("[FLASH] ❌ Erase failed! rc=%d\n", rc);
         return false;
     }
-    uintptr_t params[] = { CFG_FLASH_OFFSET, (uintptr_t)&img };
+    uintptr_t params[] = {CFG_FLASH_OFFSET, (uintptr_t)&img};
     rc = flash_safe_execute(call_flash_range_program, params, UINT32_MAX);
-    if (rc != PICO_OK) {
+    if (rc != PICO_OK)
+    {
         printf("[FLASH] ❌ Program failed! rc=%d\n", rc);
         return false;
     }

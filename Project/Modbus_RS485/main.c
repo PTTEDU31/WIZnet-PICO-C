@@ -198,6 +198,9 @@ void core1_entry(void)
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VOUT, &psu_local.vout, 0.01f);
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, RED_TEMP, &psu_local.temp, 0.1f);
 
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VBAT, &psu_local.batt_voltage, 0.1f);
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_IBAT, &psu_local.batt_current, 0.01f);
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_BAT_TEMPERATURE, &psu_local.batt_temp, 0.1f);
             // // Fault & SNMP trap
             uint16_t fault_raw = 0;
             modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);

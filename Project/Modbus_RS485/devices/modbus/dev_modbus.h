@@ -25,9 +25,13 @@ extern "C" {
 #define REG_VOUT_SET         0x0020
 #define REG_READ_VIN         0x0050
 #define REG_READ_VOUT        0x0060
-#define RED_READ_IOUT        0X0061
-#define RED_READ_VBAT        0X00D3
-#define RED_READ_IBAT        0X00D4
+#define REG_READ_IOUT        0X0061
+
+
+#define REG_READ_VBAT        0X00D3
+#define REG_READ_IBAT        0X00D4
+#define REG_BAT_TEMPERATURE  0x00D5
+#define REG_CURVE_CC_TIMEOUT     0x00B6
 
 #define REG_CURVE_CC         0x00B0
 #define REG_CURVE_CV         0x00B1

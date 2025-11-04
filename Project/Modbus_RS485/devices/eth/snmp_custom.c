@@ -5,6 +5,8 @@
  ********************************************************************************************/
 #include "snmp_custom.h"
 #include "../psu_data/psu_data.h"
+#include "../config/app_config.h"
+#include "math.h"
 
 static uint8_t OID_VIN[16], OID_VOUT[16], OID_VSET[16], OID_IOUT[16], OID_FAULT[16];
 static uint8_t OID_TRAP_SEVERITY[16];
@@ -30,7 +32,7 @@ static void get_output_voltage(void *ptr, uint8_t *len)
 static void get_output_current(void *ptr, uint8_t *len)
 {
   psu_data_t psu = psu_data_read();
-  int32_t val = (int32_t)(psu.iout * 1000); 
+  int32_t val = (int32_t)(psu.iout * 1000);
   *(int32_t *)ptr = val;
   *len = sizeof(val);
 }
@@ -57,17 +59,163 @@ static void get_fault_flags(void *ptr, uint8_t *len)
   *(uint32_t *)ptr = val;
 }
 
+// Điện áp pin (V) *100
+static void get_batt_voltage(void *ptr, uint8_t *len)
+{
+  psu_data_t psu = psu_data_read();
+  int32_t val = (int32_t)(psu.batt_voltage * 100.0f);
+  *(int32_t *)ptr = val;
+  *len = sizeof(val);
+}
+
+// SOC (%) *10  -> đơn vị 0.1%
+static void get_batt_soc(void *ptr, uint8_t *len)
+{
+  psu_data_t psu = psu_data_read();
+  float soc = psu.batt_soc; // 0..100 (%)
+  if (soc < 0.f)
+    soc = 0.f;
+  if (soc > 100.f)
+    soc = 100.f;
+  int32_t val = (int32_t)lrintf(soc * 10.0f);
+  *(int32_t *)ptr = val;
+  *len = sizeof(val);
+}
+
+// Dung lượng danh định (Ah) *100
+static void get_batt_capacity_ah(void *ptr, uint8_t *len)
+{
+  const app_config_t *cfg = app_cfg_get();
+  float cap = (cfg ? cfg->psu.battery_capacity_ah : 0.0f);
+  int32_t val = (int32_t)lrintf(cap * 100.0f);
+  *(int32_t *)ptr = val;
+  *len = sizeof(val);
+}
+
+// Dung lượng còn lại ước tính (Ah) *100  = capacity * SOC/100
+static void get_batt_remaining_ah(void *ptr, uint8_t *len)
+{
+  psu_data_t psu = psu_data_read();
+  const app_config_t *cfg = app_cfg_get();
+
+  float cap = (cfg ? cfg->psu.battery_capacity_ah : 0.0f);
+  float soc = psu.batt_soc; // %
+  if (soc < 0.f)
+    soc = 0.f;
+  if (soc > 100.f)
+    soc = 100.f;
+
+  float remain_ah = cap * (soc / 100.0f);
+  if (remain_ah < 0.f)
+    remain_ah = 0.f;
+
+  int32_t val = (int32_t)lrintf(remain_ah * 100.0f);
+  *(int32_t *)ptr = val;
+  *len = sizeof(val);
+}
+
+// Thời gian sử dụng còn lại (phút) = (Ah còn lại / Iout) * 60
+// Nếu iout <= 0 (không tải), trả 0x7FFFFFFF (INT_MAX) như “vô cùng lớn”
+static void get_batt_runtime_min(void *ptr, uint8_t *len)
+{
+  psu_data_t psu = psu_data_read();
+  const app_config_t *cfg = app_cfg_get();
+
+  float cap = (cfg ? cfg->psu.battery_capacity_ah : 0.0f);
+  float soc = psu.batt_soc; // %
+  float iout = psu.iout;    // A (đang xài)
+
+  if (soc < 0.f)
+    soc = 0.f;
+  if (soc > 100.f)
+    soc = 100.f;
+
+  float remain_ah = cap * (soc / 100.0f);
+
+  int32_t val;
+  if (iout > 0.001f)
+  {
+    float minutes = (remain_ah / iout) * 60.0f;
+    if (minutes < 0.f)
+      minutes = 0.f;
+    if (minutes > 2147480000.f)
+      minutes = 2147480000.f; // chặn tràn
+    val = (int32_t)lrintf(minutes);
+  }
+  else
+  {
+    val = 0x7FFFFFFF; // “rất lớn” khi không tải
+  }
+
+  *(int32_t *)ptr = val;
+  *len = sizeof(val);
+}
+
+// Nhiệt độ pin (°C) *100 — nếu dữ liệu sẵn có
+static void get_batt_temp(void *ptr, uint8_t *len)
+{
+  psu_data_t psu = psu_data_read();
+  int32_t val = (int32_t)lrintf(psu.batt_temp * 100.0f);
+  *(int32_t *)ptr = val;
+  *len = sizeof(val);
+}
+
+// // Chế độ sạc của bộ nạp (ví dụ: 0=Idle,1=CC,2=CV,3=Float,4=Fault...)
+// // Không scale, trả thẳng integer
+// static void get_charger_mode(void *ptr, uint8_t *len)
+// {
+//   psu_data_t psu = psu_data_read();
+//   int32_t val = (int32_t)psu.charger_mode;
+//   *(int32_t *)ptr = val;
+//   *len = sizeof(val);
+// }
+
+// Cờ cảnh báo theo ngưỡng cấu hình (bitmask tự suy ra từ điện áp/SOC)
+// bit0: SOC<=30%, bit1: SOC<=20%, bit2: SOC<=10%, bit3: V<=cutoff
+static void get_batt_warn_flags(void *ptr, uint8_t *len)
+{
+  psu_data_t psu = psu_data_read();
+  const app_config_t *cfg = app_cfg_get();
+  uint32_t flags = 0;
+
+  float soc = psu.batt_soc;
+  if (soc <= 30.0f)
+    flags |= (1u << 0);
+  if (soc <= 20.0f)
+    flags |= (1u << 1);
+  if (soc <= 10.0f)
+    flags |= (1u << 2);
+
+  if (cfg)
+  {
+    float v = psu.batt_voltage;
+    if (v <= cfg->psu.voltage_cutoff_low)
+      flags |= (1u << 3);
+  }
+
+  *(uint32_t *)ptr = flags;
+  *len = sizeof(flags);
+}
+
 /* ===================================================================== */
 /*                          MIB TABLE                                     */
 /* ===================================================================== */
 
 dataEntryType snmpData[] =
     {
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_input_voltage, NULL},  // VIN
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_voltage, NULL}, // VOUT
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_set_voltage, NULL},    // VSET
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_current, NULL}, // IOUT
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_fault_flags, NULL},    // FAULT
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_input_voltage, NULL},  // 1 VIN (0.01V)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_voltage, NULL}, // 2 VOUT (0.01V)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_set_voltage, NULL},    // 3 VSET (0.01V)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_current, NULL}, // 4 IOUT (mA)
+        // ===== Battery block =====
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_voltage, NULL},      // 10 VBAT (0.01V)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_soc, NULL},          // 11 SOC (0.1%)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_capacity_ah, NULL},  // 12 Capacity Ah (0.01Ah)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_remaining_ah, NULL}, // 13 Remaining Ah (0.01Ah)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_runtime_min, NULL},  // 14 Runtime (minutes)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_temp, NULL},         // 15 Batt temp (0.01°C)
+        // {0,{0}, SNMPDTYPE_INTEGER, 4, {""}, get_charger_mode,      NULL}, // 16 Charger mode (enum)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_warn_flags, NULL}, // 17 Warn flags (bitmask)
 };
 const int32_t maxData = (int32_t)(sizeof(snmpData) / sizeof(snmpData[0]));
 
@@ -119,20 +267,26 @@ static uint8_t build_oid_scalar(uint8_t *buf, uint8_t group, uint8_t leaf)
 }
 void snmp_custom_init_oids(void)
 {
-  snmpData[0].oidlen = build_oid_branch(OID_VIN, 1);
-  memcpy(snmpData[0].oid, OID_VIN, snmpData[0].oidlen);
+  // ===== Measurements =====
+  snmpData[0].oidlen = build_oid_scalar(snmpData[0].oid, GROUP_MEAS, LEAF_VIN);
+  snmpData[1].oidlen = build_oid_scalar(snmpData[1].oid, GROUP_MEAS, LEAF_VOUT);
+  snmpData[2].oidlen = build_oid_scalar(snmpData[2].oid, GROUP_MEAS, LEAF_VSET);
+  snmpData[3].oidlen = build_oid_scalar(snmpData[3].oid, GROUP_MEAS, LEAF_IOUT);
 
-  snmpData[1].oidlen = build_oid_branch(OID_VOUT, 2);
-  memcpy(snmpData[1].oid, OID_VOUT, snmpData[1].oidlen);
+  // ===== Battery =====
+  snmpData[4].oidlen = build_oid_scalar(snmpData[4].oid, GROUP_BATT, LEAF_BAT_V);
+  snmpData[5].oidlen = build_oid_scalar(snmpData[5].oid, GROUP_BATT, LEAF_BAT_SOC);
+  snmpData[6].oidlen = build_oid_scalar(snmpData[6].oid, GROUP_BATT, LEAF_BAT_CAP);
+  snmpData[7].oidlen = build_oid_scalar(snmpData[7].oid, GROUP_BATT, LEAF_BAT_REM);
+  snmpData[8].oidlen = build_oid_scalar(snmpData[8].oid, GROUP_BATT, LEAF_BAT_RT);
+  snmpData[9].oidlen = build_oid_scalar(snmpData[9].oid, GROUP_BATT, LEAF_BAT_TMP);
 
-  snmpData[2].oidlen = build_oid_branch(OID_VSET, 3);
-  memcpy(snmpData[2].oid, OID_VSET, snmpData[2].oidlen);
+  // Nếu bật lại charger_mode:
+  // snmpData[10].oidlen = build_oid_scalar(snmpData[10].oid, GROUP_BATT, LEAF_CHG_MD);
 
-  snmpData[3].oidlen = build_oid_branch(OID_IOUT, 4);
-  memcpy(snmpData[3].oid, OID_IOUT, snmpData[3].oidlen);
-
-  snmpData[4].oidlen = build_oid_branch(OID_FAULT, 5);
-  memcpy(snmpData[4].oid, OID_FAULT, snmpData[4].oidlen);
+  // Warn flags (bitmask)
+  // Nếu bạn đang dùng vị trí idx 10 cho Warn flags:
+  snmpData[10].oidlen = build_oid_scalar(snmpData[10].oid, GROUP_BATT, LEAF_BAT_WRN);
 
   /* Severity (scalar) dùng cho trap */
   build_oid_scalar(OID_TRAP_SEVERITY, 1, 99);
@@ -165,19 +319,19 @@ uint8_t get_trap_severity(uint16_t trap_code)
 // =======================
 static dataEntryType makeIntVar(const uint8_t *oid, uint8_t oidlen, int32_t value)
 {
-    dataEntryType var = {0};
+  dataEntryType var = {0};
 
-    var.oidlen = oidlen;
-    memcpy(var.oid, oid, oidlen);
+  var.oidlen = oidlen;
+  memcpy(var.oid, oid, oidlen);
 
-    var.dataType = SNMPDTYPE_INTEGER;  // kiểu dữ liệu SNMP INTEGER
-    var.dataLen  = 4;                  // 4 byte
-    var.u.intval = value;       // Big-endian để SNMP đọc đúng
+  var.dataType = SNMPDTYPE_INTEGER; // kiểu dữ liệu SNMP INTEGER
+  var.dataLen = 4;                  // 4 byte
+  var.u.intval = value;             // Big-endian để SNMP đọc đúng
 
-    var.getfunction = NULL;
-    var.setfunction = NULL;
+  var.getfunction = NULL;
+  var.setfunction = NULL;
 
-    return var;
+  return var;
 }
 
 /* ===================================================================== */
@@ -185,18 +339,18 @@ static dataEntryType makeIntVar(const uint8_t *oid, uint8_t oidlen, int32_t valu
 /* ===================================================================== */
 void snmp_send_trap_custom(uint8_t *managerIP, uint8_t *agentIP, uint8_t trap_code)
 {
-    (void)agentIP;
+  (void)agentIP;
 
-    uint8_t ev_oid[16];
-    uint8_t len = write_enterprise_root(ev_oid); // 1.3.6.1.4.1.<EID>
-    ev_oid[len++] = 10;
-    ev_oid[len++] = trap_code;
+  uint8_t ev_oid[16];
+  uint8_t len = write_enterprise_root(ev_oid); // 1.3.6.1.4.1.<EID>
+  ev_oid[len++] = 10;
+  ev_oid[len++] = trap_code;
 
-    // VarBind: trapSeverity
-    dataEntryType vars[1];
-    vars[0] = makeIntVar(OID_TRAP_SEVERITY, sizeof(OID_TRAP_SEVERITY), get_trap_severity(trap_code));
+  // VarBind: trapSeverity
+  dataEntryType vars[1];
+  vars[0] = makeIntVar(OID_TRAP_SEVERITY, sizeof(OID_TRAP_SEVERITY), get_trap_severity(trap_code));
 
-    snmp_sendTrapV2(managerIP, (int8_t*)COMMUNITY, ev_oid, len, vars, 1);
+  snmp_sendTrapV2(managerIP, (int8_t *)COMMUNITY, ev_oid, len, vars, 1);
 }
 
 /* ===================================================================== */
