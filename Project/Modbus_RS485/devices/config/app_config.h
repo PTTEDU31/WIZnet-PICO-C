@@ -2,7 +2,8 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
-
+#include <stddef.h>
+#include "psu_config.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -10,45 +11,6 @@ extern "C" {
 #define CFG_MAGIC  0xC0A5FEEDu
 #define CFG_VER    0x0003u   // was 0x0002u :contentReference[oaicite:1]{index=1}
 
-// ===== Battery type =====
-typedef enum {
-    BATTERY_12V = 12,
-    BATTERY_24V = 24,
-    BATTERY_36V = 36,
-    BATTERY_48V = 48,
-} battery_type_t;
-
-// ===== PSU battery/profile config =====
-typedef struct
-{
-    // Battery configuration
-    battery_type_t battery_type;     // 12V/24V/36V/48V
-    float battery_capacity_ah;       // 10.0, 20.0, 50.0, 100.0
-
-    // Voltage thresholds (auto-loaded from profile)
-    float voltage_cutoff_low;        // Emergency cutoff
-    float voltage_warning;           // Warning threshold (≈30% SOC)
-    float voltage_critical;          // Critical threshold (≈20% SOC)
-
-    // Trap enable flags
-    uint8_t warning_60min_enabled;   // 1=enabled
-    uint8_t warning_30min_enabled;
-    uint8_t warning_15min_enabled;
-    uint8_t warning_5min_enabled;
-    uint8_t warning_soc30_enabled;
-    uint8_t warning_soc20_enabled;
-    uint8_t warning_soc10_enabled;
-
-    // Site identification
-    char site_identifier[32];        // "Building-5-IDF2"
-    char snmp_trap_dest[64];         // NOC IP / hostname
-    uint16_t snmp_trap_port;         // 162
-
-    // Advanced settings
-    float current_sensor_offset;     // Calibration offset
-    float voltage_sensor_scale;      // Calibration scale
-    uint8_t enable_auto_shutdown;    // Auto shutdown at emergency voltage
-} psu_config_t;
 
 typedef struct {
     // ===== Network =====
@@ -93,6 +55,12 @@ typedef struct {
 bool app_cfg_init(void);
 bool app_cfg_save(void);
 void app_cfg_reset_default(void);
+
+
+void appcfg_defaults(app_config_t* c);
+bool appcfg_validate(const app_config_t* c, char* why, size_t why_len);
+bool appcfg_to_json(const app_config_t* c, char** out_json);        // cJSON_free(out_json)
+bool appcfg_apply_json(app_config_t* c, const char* body, size_t len, char* err, size_t errlen);
 
 const app_config_t* app_cfg_get(void);
 bool app_cfg_set(const app_config_t* cfg);

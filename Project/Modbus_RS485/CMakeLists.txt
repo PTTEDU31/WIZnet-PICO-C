@@ -21,21 +21,24 @@ target_link_libraries(${TARGET_NAME}
         # TIMER_FILES    
         SNTP_FILES
         pico_multicore
-        app_config
+        cjson
         )
 
 
 target_include_directories(${TARGET_NAME} PRIVATE
 #     ../include
+        lib/cJSON-master
+        devices
 )
 
 
 # Ethernet
+add_subdirectory(lib/cJSON-master)
 add_subdirectory(devices/eth)
 add_subdirectory(devices/modbus)
 add_subdirectory(devices/psu_data)
 add_subdirectory(devices/led_status)
-add_subdirectory(config)
+add_subdirectory(devices/config)
 
 pico_generate_pio_header(${TARGET_NAME} ${CMAKE_CURRENT_LIST_DIR}/led_status.pio)
 

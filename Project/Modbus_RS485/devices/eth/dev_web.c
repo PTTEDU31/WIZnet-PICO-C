@@ -8,7 +8,7 @@
 #include "httpServer_user.h"
 #include "web_assets.h"
 
-#define ETHERNET_BUF_MAX_SIZE (8*1024) // 8KB
+#define ETHERNET_BUF_MAX_SIZE (32*1024) // 32KB
 #define HTTP_SOCKET_MAX_NUM   8
 
 static uint8_t http_tx_buf[ETHERNET_BUF_MAX_SIZE];

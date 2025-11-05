@@ -5,7 +5,7 @@
  ********************************************************************************************/
 #include "snmp_custom.h"
 #include "../psu_data/psu_data.h"
-#include "../config/app_config.h"
+#include "app_config.h"
 #include "math.h"
 
 static uint8_t OID_VIN[16], OID_VOUT[16], OID_VSET[16], OID_IOUT[16], OID_FAULT[16];
@@ -197,31 +197,6 @@ static void get_batt_warn_flags(void *ptr, uint8_t *len)
   *len = sizeof(flags);
 }
 
-/* ===================================================================== */
-/*                          MIB TABLE                                     */
-/* ===================================================================== */
-
-dataEntryType snmpData[] =
-    {
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_input_voltage, NULL},  // 1 VIN (0.01V)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_voltage, NULL}, // 2 VOUT (0.01V)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_set_voltage, NULL},    // 3 VSET (0.01V)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_current, NULL}, // 4 IOUT (mA)
-        // ===== Battery block =====
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_voltage, NULL},      // 10 VBAT (0.01V)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_soc, NULL},          // 11 SOC (0.1%)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_capacity_ah, NULL},  // 12 Capacity Ah (0.01Ah)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_remaining_ah, NULL}, // 13 Remaining Ah (0.01Ah)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_runtime_min, NULL},  // 14 Runtime (minutes)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_temp, NULL},         // 15 Batt temp (0.01°C)
-        // {0,{0}, SNMPDTYPE_INTEGER, 4, {""}, get_charger_mode,      NULL}, // 16 Charger mode (enum)
-        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_warn_flags, NULL}, // 17 Warn flags (bitmask)
-};
-const int32_t maxData = (int32_t)(sizeof(snmpData) / sizeof(snmpData[0]));
-
-/* ===================================================================== */
-/*                        OID UTILITIES (BER-128)                         */
-/* ===================================================================== */
 static uint8_t ber_encode_base128(uint32_t v, uint8_t *out)
 {
   uint8_t tmp[5];
@@ -247,13 +222,30 @@ uint8_t write_enterprise_root(uint8_t *buf)
   p += ber_encode_base128(ENTERPRISE_ID, p);
   return (uint8_t)(p - buf);
 }
-static uint8_t build_oid_branch(uint8_t *buf, uint8_t leaf)
-{
-  uint8_t len = write_enterprise_root(buf);
-  buf[len++] = 1;    // group 1 (PSU basic)
-  buf[len++] = leaf; // index
-  return len;
-}
+
+
+/* ===================================================================== */
+/*                          MIB TABLE                                     */
+/* ===================================================================== */
+
+dataEntryType snmpData[] =
+    {
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_input_voltage, NULL},  // 1 VIN (0.01V)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_voltage, NULL}, // 2 VOUT (0.01V)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_set_voltage, NULL},    // 3 VSET (0.01V)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_output_current, NULL}, // 4 IOUT (mA)
+        // ===== Battery block =====
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_voltage, NULL},      // 10 VBAT (0.01V)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_soc, NULL},          // 11 SOC (0.1%)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_capacity_ah, NULL},  // 12 Capacity Ah (0.01Ah)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_remaining_ah, NULL}, // 13 Remaining Ah (0.01Ah)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_runtime_min, NULL},  // 14 Runtime (minutes)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_temp, NULL},         // 15 Batt temp (0.01°C)
+        // {0,{0}, SNMPDTYPE_INTEGER, 4, {""}, get_charger_mode,      NULL}, // 16 Charger mode (enum)
+        {0, {0}, SNMPDTYPE_INTEGER, 4, {""}, get_batt_warn_flags, NULL}, // 17 Warn flags (bitmask)
+};
+const int32_t maxData = (int32_t)(sizeof(snmpData) / sizeof(snmpData[0]));
+
 /* ============================= */
 /*  Build OID for scalar object  */
 /* ============================= */
@@ -293,6 +285,19 @@ void snmp_custom_init_oids(void)
 }
 
 __attribute__((constructor)) static void _snmp_custom_ctor(void) { snmp_custom_init_oids(); }
+
+
+/* ===================================================================== */
+/*                        OID UTILITIES (BER-128)                         */
+/* ===================================================================== */
+
+static uint8_t build_oid_branch(uint8_t *buf, uint8_t leaf)
+{
+  uint8_t len = write_enterprise_root(buf);
+  buf[len++] = 1;    // group 1 (PSU basic)
+  buf[len++] = leaf; // index
+  return len;
+}
 
 uint8_t get_trap_severity(uint16_t trap_code)
 {

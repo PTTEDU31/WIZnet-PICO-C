@@ -10,7 +10,3 @@
 [submodule "libraries/pico-extras"]
 	path = libraries/pico-extras
 	url = https://github.com/raspberrypi/pico-extras.git
-[submodule "extern/cJSON"]
-	path = extern/cJSON
-	url = https://github.com/DaveGamble/cJSON
-	shallow = true

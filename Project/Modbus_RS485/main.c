@@ -29,7 +29,14 @@
 #include "devices/eth/snmp_custom.h"
 #include "devices/psu_data/psu_data.h"
 #include "devices/led_status/led_status.h"
-#include "app_config.h"
+#include "devices/config/app_config.h"
+#include "cJSON.h"
+// ============================
+// Core1 Stack
+// ============================
+__attribute__((aligned(16)))
+static uint32_t core1_stack[8192 / sizeof(uint32_t)];
+
 
 // ===========================================================
 // RS485 Direction Control
@@ -123,13 +130,12 @@ void snmp_trap_test_demo(uint8_t managerIP[4])
     printf("[SNMP TEST] Done.\n");
 }
 
-void core1_entry(void)
+void core1_main(void)
 {
     // ===========================================================
     // 1️⃣ Khởi tạo an toàn vùng flash (tránh xung đột core0)
     // ===========================================================
     flash_safe_execute_core_init();
-    sleep_ms(10000);
 
     // ===========================================================
     // 2️⃣ Khởi tạo UART0 RS485
@@ -149,6 +155,9 @@ void core1_entry(void)
     led_init();
     led_set_state(DEV_BOOTING);
     printf("[CORE1] Starting loop...\n");
+    
+    
+    psu_data_init();
 
     // ===========================================================
     // 4️⃣ Lấy config hệ thống 1 lần (chỉ đọc)
@@ -161,10 +170,10 @@ void core1_entry(void)
     uint32_t last_hb = 0;
     uint32_t last_led = 0;
     uint32_t last_modbus = 0;
-
+    uint32_t last_modbus_batt = 0;
     uint8_t mgr[4] = {cfg->snmp_manager_ip[0], cfg->snmp_manager_ip[1], cfg->snmp_manager_ip[2], cfg->snmp_manager_ip[3]};
     uint8_t agt[4] = {cfg->ip[0], cfg->ip[1], cfg->ip[2], cfg->ip[3]};
-    snmp_trap_test_demo(mgr);
+    // snmp_trap_test_demo(mgr);
     // snmp_trap_quick_test(mgr, agt);
 
     // ===========================================================
@@ -186,32 +195,39 @@ void core1_entry(void)
         // -------------------------------------------------------
         // (B) Modbus polling định kỳ
         // -------------------------------------------------------
-        if (now - last_modbus >= 300) // 300ms/poll
+        if (now - last_modbus >= 1000) // 1000ms/poll
         {
             last_modbus = now;
+            // printf("[MODBUS] Polling PSU slave %d...\n", cfg->psu_slave_addr);
 
             uint8_t slave_id = cfg->psu_slave_addr;
             psu_data_t psu_local = {0};
 
-            // Ví dụ đọc một vài thanh ghi cơ bản
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VIN, &psu_local.vin, 0.1f);
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VOUT, &psu_local.vout, 0.01f);
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_IOUT, &psu_local.iout, 0.01f);
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, RED_TEMP, &psu_local.temp, 0.1f);
 
-            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VBAT, &psu_local.batt_voltage, 0.1f);
+
+            modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VBAT, &psu_local.batt_voltage, 0.01f);
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_IBAT, &psu_local.batt_current, 0.01f);
             modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_BAT_TEMPERATURE, &psu_local.batt_temp, 0.1f);
-            // // Fault & SNMP trap
+            // // // Fault & SNMP trap
             uint16_t fault_raw = 0;
             modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);
             psu_data_update(&psu_local);
-            // snmp_process_fault_trap(managerIP, agentIP);
+            snmp_process_fault_trap(managerIP, agentIP);
         }
+        // if (now - last_modbus_batt >= 100) // 300ms/poll
+        // {
+        //     last_modbus_batt = now;
 
-        // -------------------------------------------------------
-        // (C) LED hiển thị trạng thái (non-blocking)
-        // -------------------------------------------------------
-        // led_update();
+        //     uint8_t slave_id = cfg->psu_slave_addr;
+        //     psu_data_t psu_local = {0};
+        //     modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_VBAT, &psu_local.batt_voltage, 0.1f);
+        //     modbus_read_float(slave_id, MODBUS_FC_READ_INPUT, REG_READ_IBAT, &psu_local.batt_current, 0.01f);
+        //     psu_data_update(&psu_local);
+        // }
 
         // -------------------------------------------------------
         // (D) Debug pattern: đổi trạng thái LED 5s một lần
@@ -227,9 +243,16 @@ void core1_entry(void)
         // -------------------------------------------------------
         // (E) Nhường CPU cho hệ thống (non-blocking)
         // -------------------------------------------------------
-        tight_loop_contents();
+        // tight_loop_contents();
     }
 }
+void start_core1(void) {
+    multicore_launch_core1_with_stack((void (*)(void))core1_main,
+                                      core1_stack,
+                                      sizeof(core1_stack));
+
+}
+
 // ===========================================================
 // Main
 // ===========================================================
@@ -239,19 +262,17 @@ int main(void)
     set_sys_clock_khz(200000, true);
     stdio_init_all();
 
-    psu_data_init();
 
-    // Watchdog 4s
-    // watchdog_enable(4000, true);
+
+    start_core1();
 
     flash_safe_execute_core_init();
-
-    multicore_reset_core1();
-    multicore_launch_core1(core1_entry);
     printf("\r\n=== RP2040 Modbus PSU Monitor + W5500 (Web + SNTP + DHCP) ===\r\n");
 
-    if (!app_cfg_init())
+    if (!app_cfg_init()){
+    
         printf("[CFG] Invalid or empty config, using defaults.\n");
+    }
     else
         printf("[CFG] Configuration loaded successfully.\n");
 
@@ -296,13 +317,12 @@ int main(void)
             }
         }
 
-        // --- Log bộ nhớ ---
-        if (now - last_mem_log >= 10000)
-        {
-            last_mem_log = now;
-            dump_mem_usage("periodic");
-        }
+        // // --- Log bộ nhớ ---
+        // if (now - last_mem_log >= 10000)
+        // {
+        //     last_mem_log = now;
+        //     dump_mem_usage("periodic");
+        // }
 
-        sleep_ms(1);
     }
 }

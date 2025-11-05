@@ -46,15 +46,6 @@ extern "C" {
 // /* ===========================
 //  * Global monitored variables
 //  * =========================== */
-// extern float g_vin;   // input voltage
-// extern float g_vout;  // output voltage
-// extern float g_vset;  // set voltage
-// extern float g_iout;    // current output
-// extern float g_cc;    // current limit
-// extern float g_temp;    // current limit
-// extern fault_flags_t g_fault_flags;   // trạng thái lỗi mới nhất
-// extern uint16_t g_fault_status;
-
 /* ======= BIT LỖI (nếu layout khác, đổi tại đây) ======= */
 enum {
   BIT_OTP    = 1,

@@ -133,7 +133,7 @@ bool modbus_read_registers(uint8_t slave_id, uint8_t func_code,
 bool modbus_read_u16(uint8_t slave_id, uint8_t func_code,
                      uint16_t reg_addr, uint16_t *value) {
     uint8_t rx[16];
-    if (!modbus_read_registers(slave_id, func_code, reg_addr, 1, rx, 1000))
+    if (!modbus_read_registers(slave_id, func_code, reg_addr, 1, rx, 5))
         return false;
     *value = (rx[3] << 8) | rx[4];
     return true;
@@ -145,6 +145,7 @@ bool modbus_read_float(uint8_t slave_id, uint8_t func_code,
     if (!modbus_read_u16(slave_id, func_code, reg_addr, &raw))
         return false;
     *value = raw * scale;
+    // printf("[MODBUS] Read float: Reg=0x%04X Raw=0x%04X Scaled=%.3f\n", reg_addr, raw, *value);
     return true;
 }
 
