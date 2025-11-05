@@ -21,6 +21,10 @@ extern "C" {
 #define		METHOD_GET		1		/**< GET Method.   */
 #define		METHOD_HEAD		2		/**< HEAD Method.  */
 #define		METHOD_POST		3		/**< POST Method.  */
+#define		METHOD_PUT		4		/**< PUT Method.   */
+#define		METHOD_DELETE	5		/**< DELETE Method.*/
+#define		METHOD_PATCH	6		/**< PATCH Method.  */
+#define		METHOD_OPTIONS	7		/**< OPTIONS Method. */
 
 /* HTTP GET Method */
 #define		PTYPE_ERR		0		/**< Error file. */
