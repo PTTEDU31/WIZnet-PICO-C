@@ -31,6 +31,7 @@ setInterval(updateData, 10000);
 // ================== PAGE LOAD ==================
 window.onload = () => {
   updateData();
+  updateBattery();
   loadNetwork();
   loadConfig();
   loadTheme();
@@ -48,7 +49,10 @@ function openTab(evt, tabName) {
   document.querySelectorAll(".tablink").forEach(btn => btn.classList.remove("active"));
   document.getElementById(tabName).style.display = "block";
   evt.currentTarget.classList.add("active");
+
+  if (tabName === "batteryTab") updateBattery(); 
 }
+
 
 // ================== NETWORK ==================
 async function loadNetwork() {
@@ -99,10 +103,13 @@ async function saveNetwork() {
       msg.style.color = "red";
     }
   } catch {
-    saveStatus.textContent = "⚠️ Connection error.";
+    const msg = document.getElementById("saveStatus");   // <-- FIX
+    if (msg) {
+      msg.textContent = "⚠️ Connection error.";
+      msg.style.color = "red";
+    }
   }
 }
-
 // ================== CONFIG ==================
 async function loadConfig() {
   try {
@@ -112,9 +119,14 @@ async function loadConfig() {
     document.getElementById("deviceName").value = cfg.device_name;
     document.getElementById("uuid").value = cfg.uuid;
     document.getElementById("timezone").value = cfg.timezone;
-    document.getElementById("slaveAddr").value = cfg.psu_slave_addr;
+
+    const slaveHex = (typeof cfg.psu_slave_addr === "string")
+      ? cfg.psu_slave_addr
+      : Number(cfg.psu_slave_addr || 0).toString(16);
+    document.getElementById("slaveAddr").value = slaveHex.toUpperCase();  // <-- FIX
+
     document.getElementById("snmpEnable").value = cfg.snmp_enable;
-    document.getElementById("trapMask").value = cfg.trap_enable_mask.toString(16).toUpperCase();
+    document.getElementById("trapMask").value = (cfg.trap_enable_mask ?? 0).toString(16).toUpperCase();
     document.getElementById("sntpEnable").value = cfg.sntp_enable;
     document.getElementById("webEnable").value = cfg.web_enable;
     document.getElementById("underVolt").value = cfg.psu_in_undervolt_V;
@@ -124,12 +136,11 @@ async function loadConfig() {
     console.warn("Config load failed:", err);
   }
 }
-
 async function saveConfig() {
   const body = {
     device_name: document.getElementById("deviceName").value,
     timezone: parseInt(document.getElementById("timezone").value),
-    psu_slave_addr: parseInt(document.getElementById("slaveAddr").value),
+    psu_slave_addr: (document.getElementById("slaveAddr").value || "00").toUpperCase(), // <-- FIX
     snmp_enable: parseInt(document.getElementById("snmpEnable").value),
     trap_enable_mask: parseInt(document.getElementById("trapMask").value, 16),
     sntp_enable: parseInt(document.getElementById("sntpEnable").value),
@@ -154,10 +165,13 @@ async function saveConfig() {
       msg.style.color = "red";
     }
   } catch {
-    cfgStatus.textContent = "⚠️ Save error (network)";
+    const msg = document.getElementById("cfgStatus");
+    if (msg) {
+      msg.textContent = "⚠️ Save error (network)";
+      msg.style.color = "red";
+    }
   }
 }
-
 // ================== DEVICE ==================
 async function refreshDevice() {
   const sp = document.getElementById("spinnerDev");
@@ -199,7 +213,35 @@ function clearLogs() {
   document.getElementById("logContainer").textContent = "";
 }
 
-// ================== THEME ==================
+
+// // ================== BATTERY ==================
+// async function updateBattery() {
+//   const sp = document.getElementById("spinnerBatt");
+//   if (sp) sp.style.display = "block";
+//   try {
+//     const res = await fetch("/api/battery");
+//     if (!res.ok) throw new Error("HTTP " + res.status);
+//     const b = await res.json();
+//     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+//     set("psu_type", (b.psu_type ?? 48) + " V");
+//     set("batt_voltage", (b.batt_voltage ?? 0).toFixed(2) + " V");
+//     set("batt_current", (b.batt_current ?? 0).toFixed(3) + " A");
+//     set("batt_soc", (b.batt_soc ?? 0).toFixed(1) + " %");
+//     set("batt_runtime", (b.batt_runtime_min ?? 0).toFixed(1));
+//     set("batt_capacity", (b.batt_capacity_Ah ?? 0).toFixed(2) + " Ah");
+//     set("batt_flags", "0x" + ((b.batt_flags ?? 0) & 0xFFFF).toString(16).toUpperCase());
+//   } catch (e) {
+//     ["psu_type", "batt_voltage", "batt_current", "batt_soc", "batt_runtime", "batt_capacity", "batt_flags"]
+//       .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = "--"; });
+//   } finally {
+//     if (sp) sp.style.display = "none";
+//   }
+// }
+// setInterval(updateBattery, 10000);
+
+
+// ================== THEME ==================  
 function toggleTheme() {
   const isLight = document.body.classList.toggle("light-mode");
   localStorage.setItem("theme", isLight ? "light" : "dark");

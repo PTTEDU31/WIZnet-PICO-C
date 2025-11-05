@@ -8,8 +8,11 @@
 #include "app_config.h"
 #include "math.h"
 
-static uint8_t OID_VIN[16], OID_VOUT[16], OID_VSET[16], OID_IOUT[16], OID_FAULT[16];
+// static uint8_t OID_VIN[16], OID_VOUT[16], OID_VSET[16], OID_IOUT[16], OID_FAULT[16];
 static uint8_t OID_TRAP_SEVERITY[16];
+#define TRAP_EN_POWERFAIL(mask)   ((mask) & (1u<<0))
+#define TRAP_EN_OVERTEMP(mask)    ((mask) & (1u<<1))
+#define TRAP_EN_OVERCURR(mask)    ((mask) & (1u<<2))
 /* =========================== */
 /*     Getter Callbacks        */
 /* =========================== */
@@ -380,37 +383,71 @@ void snmp_trap_state_reset(void) { last_fault = 0xFFFF; }
 
 void snmp_process_fault_trap(uint8_t *managerIP, uint8_t *agentIP)
 {
-  // uint16_t new_fault = g_fault_status;
-  // fault_flags_t f    = g_fault_flags;
+    static uint16_t last_fault = 0xFFFF;   // 0xFFFF = chưa khởi tạo
 
-  // if (last_fault == 0xFFFF) { last_fault = new_fault; return; }
-  // uint16_t changed = (uint16_t)(last_fault ^ new_fault);
-  // if (!changed) return;
+    // Đọc trạng thái PSU hiện tại (thread-safe)
+    psu_data_t psu = psu_data_read();
+    uint16_t new_fault = psu.fault.raw;
 
-  // printf("[SNMP] Fault changed: old=0x%04X new=0x%04X\n", last_fault, new_fault);
+    // Lần đầu: chỉ ghi nhận trạng thái ban đầu để tránh bắn trap giả
+    if (last_fault == 0xFFFF) {
+        last_fault = new_fault;
+        return;
+    }
 
-  // /* AC_FAIL (Power Failure/Restored) */
-  // if (changed & (1u<<BIT_ACFAIL)) {
-  //   if (f.ac_fail) snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_FAILURE);
-  //   else           snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_RESTORED);
-  // }
-  // /* OP_OFF (Output Disabled/Restored) */
-  // if (changed & (1u<<BIT_OPOFF)) {
-  //   if (f.op_off) snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_DISABLED);
-  //   else          snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_RESTORED);
-  // }
-  // /* OTP set/cleared */
-  // if (changed & (1u<<BIT_OTP)) {
-  //   if (f.otp) snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_TEMPERATURE);
-  //   else       snmp_send_trap_custom(managerIP, agentIP, TRAP_OTP_CLEARED);
-  // }
-  // /* OLP set/cleared */
-  // if (changed & (1u<<BIT_OLP)) {
-  //   if (f.olp) snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_CURRENT);
-  //   else       snmp_send_trap_custom(managerIP, agentIP, TRAP_OCP_CLEARED);
-  // }
+    uint16_t changed = (uint16_t)(last_fault ^ new_fault);
+    if (!changed) return;  // không có thay đổi -> thoát nhanh
 
-  // last_fault = new_fault;
+    const app_config_t *cfg = app_cfg_get();
+    uint8_t mask = cfg ? cfg->trap_enable_mask : 0xFF; // nếu chưa có cfg thì bắn tất cả
+
+    printf("[SNMP] Fault changed: old=0x%04X new=0x%04X (mask=0x%02X)\n",
+           last_fault, new_fault, mask);
+
+    // ===== AC_FAIL: Power Failure / Power Restored =====
+    if (changed & (1u << BIT_ACFAIL)) {
+        if (TRAP_EN_POWERFAIL(mask)) {
+            if (psu.fault.bits.ac_fail)
+                snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_FAILURE);
+            else
+                snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_RESTORED);
+        }
+    }
+
+    // ===== OP_OFF: Output Disabled / Output Restored =====
+    if (changed & (1u << BIT_OPOFF)) {
+        // tuỳ chọn: dùng chung bit enable với PowerFail, hoặc luôn bắn
+        if (TRAP_EN_POWERFAIL(mask)) {
+            if (psu.fault.bits.op_off)
+                snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_DISABLED);
+            else
+                snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_RESTORED);
+        }
+    }
+
+    // ===== OTP: Over Temperature Set/Cleared =====
+    if (changed & (1u << BIT_OTP)) {
+        if (TRAP_EN_OVERTEMP(mask)) {
+            if (psu.fault.bits.otp)
+                snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_TEMPERATURE);
+            else
+                snmp_send_trap_custom(managerIP, agentIP, TRAP_OTP_CLEARED);
+        }
+    }
+
+    // ===== OLP: Over Current Set/Cleared =====
+    if (changed & (1u << BIT_OLP)) {
+        if (TRAP_EN_OVERCURR(mask)) {
+            if (psu.fault.bits.olp)
+                snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_CURRENT);
+            else
+                snmp_send_trap_custom(managerIP, agentIP, TRAP_OCP_CLEARED);
+        }
+    }
+
+    // (Nếu bạn muốn thêm OVP, SHORT, FAN_FAIL … thì lặp lại mẫu trên)
+
+    last_fault = new_fault;
 }
 
 /* ===================================================================== */

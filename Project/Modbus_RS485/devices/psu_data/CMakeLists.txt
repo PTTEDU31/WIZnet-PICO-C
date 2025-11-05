@@ -1,6 +1,8 @@
 target_sources(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/psu_data.c
+    ${CMAKE_CURRENT_LIST_DIR}/psu_data_save.c
     ${CMAKE_CURRENT_LIST_DIR}/psu_config.c
+
 
 
 )

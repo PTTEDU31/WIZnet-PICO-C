@@ -108,6 +108,16 @@ void app_cfg_reset_default(void) {
     psu_profile_apply_defaults(&g_cfg.psu);
 
     // Trap flags mặc định
+
+     // Battery/profile
+    g_cfg.psu.battery_type = BATT_TYPE_24V;
+    g_cfg.psu.battery_capacity_ah = 20.0f;
+    g_cfg.psu.voltage_cutoff_low = 21.0f;
+    g_cfg.psu.voltage_warning    = 22.5f;
+    g_cfg.psu.voltage_critical   = 22.0f;
+
+
+
     g_cfg.psu.warning_60min_enabled = 1;
     g_cfg.psu.warning_30min_enabled = 1;
     g_cfg.psu.warning_15min_enabled = 1;
@@ -217,6 +227,7 @@ bool app_cfg_init(void) {
         return true;
     }
     // Không hợp lệ -> default + save
+    // appcfg_defaults(&g_cfg);
     app_cfg_reset_default();
     return app_cfg_save();
 }
@@ -248,22 +259,30 @@ static inline void _strzcpy(char* dst, size_t dstsz, const char* src) {
 void appcfg_defaults(app_config_t* c) {
     memset(c, 0, sizeof(*c));
     // Network
-    c->mac[0]=0x02; c->mac[1]=0x00; c->mac[2]=0x00; c->mac[3]=0x00; c->mac[4]=0x00; c->mac[5]=0x01;
-    c->ip[0]=192; c->ip[1]=168; c->ip[2]=1; c->ip[3]=77;
-    c->gw[0]=192; c->gw[1]=168; c->gw[2]=1; c->gw[3]=1;
+    //  g_cfg.mac[0] = 0x00; g_cfg.mac[1] = 0x08; g_cfg.mac[2] = 0xDC;
+    // g_cfg.mac[3] = 0x12; g_cfg.mac[4] = 0x34; g_cfg.mac[5] = 0x56;
+
+    // g_cfg.ip[0]=192; g_cfg.ip[1]=168; g_cfg.ip[2]=137; g_cfg.ip[3]=123;
+    // g_cfg.sn[0]=255; g_cfg.sn[1]=255; g_cfg.sn[2]=255; g_cfg.sn[3]=0;
+    // g_cfg.gw[0]=192; g_cfg.gw[1]=168; g_cfg.gw[2]=137; g_cfg.gw[3]=1;
+    // g_cfg.dns[0]=8;  g_cfg.dns[1]=8;  g_cfg.dns[2]=8;  g_cfg.dns[3]=8;
+    g_cfg.dhcp_enable = 0;
+    c->mac[0]=0x02; c->mac[1]=0x00; c->mac[2]=0x00; c->mac[3]=0x44; c->mac[4]=0x55; c->mac[5]=0x66;
+    c->ip[0]=192; c->ip[1]=168; c->ip[2]=137; c->ip[3]=123;
+    c->gw[0]=192; c->gw[1]=168; c->gw[2]=137; c->gw[3]=1;
     c->sn[0]=255; c->sn[1]=255; c->sn[2]=255; c->sn[3]=0;
     c->dns[0]=8; c->dns[1]=8; c->dns[2]=8; c->dns[3]=8;
     c->dhcp_enable = 1;
 
     // SNMP
-    c->snmp_manager_ip[0]=192; c->snmp_manager_ip[1]=168; c->snmp_manager_ip[2]=1; c->snmp_manager_ip[3]=100;
+    c->snmp_manager_ip[0]=192; c->snmp_manager_ip[1]=168; c->snmp_manager_ip[2]=137; c->snmp_manager_ip[3]=1;
     c->trap_enable_mask = (TRAP_POWER_FAILURE | TRAP_OVER_TEMPERATURE | TRAP_OVER_CURRENT);
     // c->trap_enable_mask = (TRAP_POWER_FAIL | TRAP_OVER_TEMP | TRAP_OVER_CURR);
 
     c->snmp_enable = 1;
 
     // Modbus/PSU
-    c->psu_slave_addr = 1;
+    c->psu_slave_addr = 131;
     c->psu_in_undervolt_V = 20.0f;   // ví dụ cho 24V input
     c->psu_out_overvolt_V = 29.0f;
     c->psu_overcurrent_A  = 10.0f;

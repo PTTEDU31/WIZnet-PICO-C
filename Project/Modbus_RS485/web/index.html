@@ -19,10 +19,12 @@
     <!-- Tabs -->
     <div class="tab">
       <button class="tablink active" onclick="openTab(event, 'statusTab')">Status</button>
+      <button class="tablink" onclick="openTab(event, 'batteryTab')">Battery</button>
       <button class="tablink" onclick="openTab(event, 'settingsTab')">Settings</button>
       <button class="tablink" onclick="openTab(event, 'deviceTab')">Device Info</button>
       <button class="tablink" onclick="openTab(event, 'logsTab')">Logs</button>
     </div>
+
 
     <!-- STATUS -->
     <div id="statusTab" class="tabcontent">
@@ -56,6 +58,46 @@
       </table>
       <div class="footer">Auto-refresh every 30s</div>
     </div>
+    <!-- BATTERY -->
+    <div id="batteryTab" class="tabcontent" style="display:none">
+      <div id="spinnerBatt" class="spinner" style="display:none;"></div>
+      <table id="batteryTable">
+        <tr>
+          <th>Parameter</th>
+          <th>Value</th>
+        </tr>
+        <tr>
+          <td>PSU Type</td>
+          <td id="psu_type">--</td>
+        </tr>
+        <tr>
+          <td>Battery Voltage</td>
+          <td id="batt_voltage">--</td>
+        </tr>
+        <tr>
+          <td>Battery Current</td>
+          <td id="batt_current">--</td>
+        </tr>
+        <tr>
+          <td>Battery SOC</td>
+          <td id="batt_soc">--</td>
+        </tr>
+        <tr>
+          <td>Runtime (min)</td>
+          <td id="batt_runtime">--</td>
+        </tr>
+        <tr>
+          <td>Capacity (Ah)</td>
+          <td id="batt_capacity">--</td>
+        </tr>
+        <tr>
+          <td>Flags</td>
+          <td id="batt_flags">--</td>
+        </tr>
+      </table>
+      <div class="footer">Auto-refresh every 10s</div>
+    </div>
+
 
     <!-- SETTINGS -->
     <div id="settingsTab" class="tabcontent" style="display:none">

@@ -65,6 +65,38 @@ typedef struct
     battery_flags_t batt_flags;
 } psu_data_t;
 
+// ===== 1) Thêm struct cho 1 chu kỳ =====
+typedef struct {
+    // mAh tích lũy (dương: sạc vào; âm: xả ra)
+    float mAh;             
+    float vmax;            // Vmax trong chu kỳ
+    float imax;            // Imax |I| lớn nhất
+    float tmax;            // Tmax (°C)
+    uint32_t start_ms;     // timestamp bắt đầu
+    uint32_t end_ms;       // timestamp kết thúc
+    uint8_t  charging;     // 1 = chu kỳ sạc, 0 = xả
+} psu_cycle_stat_t;
+
+// ===== 2) Bộ nhớ 10 chu kỳ gần nhất + học dung lượng =====
+#define PSU_CYCLE_WINDOW 1
+
+typedef struct {
+    // Bộ đếm tích phân hiện tại theo thời gian thực
+    float accum_mAh;         // tích phân đang chạy
+    float vmax_run, imax_run, tmax_run;
+    uint8_t active_charging; // trạng thái chu kỳ hiện hành (1=charging,0=discharging)
+    uint32_t last_tick_ms;   // mốc thời gian lần cập nhật trước
+
+    // Vòng tròn 10 mục
+    psu_cycle_stat_t ring[PSU_CYCLE_WINDOW];
+    uint8_t head;           // vị trí ghi tiếp theo
+    uint8_t count;          // số mục đã có trong ring
+
+    // Giá trị học được
+    float learned_capacity_mAh_avg;   // trung bình |mAh| của 10 chu kỳ
+    float learned_capacity_mAh_best;  // max |mAh|
+} psu_cycle_db_t;
+
 // =============================================================
 // PSU Data module API
 // =============================================================
@@ -146,5 +178,21 @@ uint8_t psu_assess_battery_status(void);
  * @return 1 if should shutdown, 0 otherwise
  */
 uint8_t psu_should_emergency_shutdown(void);
+
+
+const psu_cycle_db_t* psu_cycles_get(void);
+float psu_learned_capacity_mAh(void);
+float psu_learned_capacity_mAh_best(void);
+
+void psu_cycles_overwrite(const psu_cycle_db_t* src);  // nạp dữ liệu load từ flash
+
+// In chu kỳ đang chạy:
+void psu_cycles_print_current();
+
+// In danh sách các chu kỳ đã đóng:
+void psu_cycles_print_all();
+
+// Xuất CSV để copy log:
+void psu_cycles_print_csv();
 
 #endif // PSU_DATA_H

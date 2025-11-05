@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <title>Advanced Settings</title>
@@ -12,39 +11,140 @@
     <h2>Advanced Configuration</h2>
 
     <form id="configForm">
-      <label>Device Name:</label>
-      <input id="deviceName" type="text" />
 
-      <label>UUID:</label>
-      <input id="uuid" type="text" readonly />
+      <!-- ========== General Config (table layout) ========== -->
+      <section class="card">
+        <h2>General</h2>
+        <table class="h-table">
+          <tbody>
+            <tr>
+              <th><label for="deviceName">Device Name</label></th>
+              <td><input id="deviceName" type="text" /></td>
+            </tr>
 
+            <tr>
+              <th><label for="uuid">UUID</label></th>
+              <td><input id="uuid" type="text" readonly /></td>
+            </tr>
 
-      <label>Timezone (UTC+):</label>
-      <input id="timezone" type="number" min="-12" max="14" />
+            <tr>
+              <th><label for="timezone">Timezone (UTC+)</label></th>
+              <td><input id="timezone" type="number" min="-12" max="14" /></td>
+            </tr>
 
-      <label>PSU Slave Address (HEX):</label>
-      <input id="slaveAddr" type="text" maxlength="2" pattern="^[0-9A-Fa-f]{1,2}$" placeholder="e.g. 1D" />
+            <tr>
+              <th><label for="slaveAddr">PSU Slave Address (HEX)</label></th>
+              <td><input id="slaveAddr" type="text" maxlength="2" pattern="^[0-9A-Fa-f]{1,2}$" placeholder="e.g. 1D" /></td>
+            </tr>
 
-      <label>SNMP Enable:</label>
-      <select id="snmpEnable">
-        <option value="0">Disabled</option>
-        <option value="1">Enabled</option>
-      </select>
+            <tr>
+              <th><label for="snmpEnable">SNMP Enable</label></th>
+              <td>
+                <select id="snmpEnable">
+                  <option value="0">Disabled</option>
+                  <option value="1">Enabled</option>
+                </select>
+              </td>
+            </tr>
 
-      <label>SNMP Manager IP:</label>
-      <input id="ipSnmp" type="text" placeholder="192.168.1.10" />
+            <tr>
+              <th><label for="ipSnmp">SNMP Manager IP</label></th>
+              <td><input id="ipSnmp" type="text" placeholder="192.168.1.10" /></td>
+            </tr>
 
-      <label>Trap Mask (Hex):</label>
-      <input id="trapMask" type="text" placeholder="e.g. 07" />
+            <tr>
+              <th><label for="trapMask">Trap Mask (Hex)</label></th>
+              <td><input id="trapMask" type="text" placeholder="e.g. 07" /></td>
+            </tr>
 
-      <label>Overtemperature Limit (°C):</label>
-      <input id="overTemp" type="number" step="0.1" />
+            <tr>
+              <th><label for="overTemp">Overtemperature Limit (°C)</label></th>
+              <td><input id="overTemp" type="number" step="0.1" /></td>
+            </tr>
 
-      <label>Overcurrent Limit (A):</label>
-      <input id="overCurrent" type="number" step="0.01" />
+            <tr>
+              <th><label for="overCurrent">Overcurrent Limit (A)</label></th>
+              <td><input id="overCurrent" type="number" step="0.01" /></td>
+            </tr>
 
-      <label>Undervoltage Input (V):</label>
-      <input id="underVolt" type="number" step="0.1" />
+            <tr>
+              <th><label for="underVolt">Undervoltage Input (V)</label></th>
+              <td><input id="underVolt" type="number" step="0.1" /></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ========== MAC & Battery (table layout) ========== -->
+      <section class="card">
+        <h2>MAC &amp; Battery Settings</h2>
+
+        <table class="h-table">
+          <tbody>
+            <!-- MAC -->
+            <tr>
+              <th><label for="advMac">MAC Address</label></th>
+              <td>
+                <div class="row-inline">
+                  <input
+                    id="advMac"
+                    type="text"
+                    placeholder="00:08:DC:12:34:56"
+                    pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+                    autocomplete="off"
+                    style="max-width:260px"
+                  />
+                  <button id="btnSaveMac" type="button">💾 Save MAC</button>
+                  <span id="macMsg" class="hint"></span>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Battery / PSU -->
+            <tr>
+              <th><label for="advPsuType">PSU Type (V)</label></th>
+              <td>
+                <select id="advPsuType" style="max-width:120px">
+                  <option value="12">12</option>
+                  <option value="24">24</option>
+                  <option value="36">36</option>
+                  <option value="48" selected>48</option>
+                </select>
+              </td>
+            </tr>
+
+            <tr>
+              <th><label for="advBattAh">Battery Capacity (Ah)</label></th>
+              <td><input id="advBattAh" type="number" step="0.1" placeholder="20.0" style="max-width:160px" /></td>
+            </tr>
+
+            <tr>
+              <th><label for="advBattCutoff">Battery Cutoff (V)</label></th>
+              <td><input id="advBattCutoff" type="number" step="0.1" placeholder="48.0" style="max-width:160px" /></td>
+            </tr>
+
+            <tr>
+              <th><label for="advBattFull">Battery Full (V)</label></th>
+              <td><input id="advBattFull" type="number" step="0.1" placeholder="58.4" style="max-width:160px" /></td>
+            </tr>
+
+            <tr>
+              <th><label for="advRuntimeFactor">Runtime Factor</label></th>
+              <td><input id="advRuntimeFactor" type="number" step="0.01" placeholder="1.00" style="max-width:120px" /></td>
+            </tr>
+
+            <tr>
+              <th></th>
+              <td>
+                <div class="row-inline">
+                  <button id="btnSaveBattery" type="button">💾 Save Battery Config</button>
+                  <span id="battMsg" class="hint"></span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
       <div class="buttons">
         <button type="button" onclick="saveConfig()">💾 Save</button>
@@ -56,5 +156,4 @@
 
   <script src="advanced.js"></script>
 </body>
-
 </html>
