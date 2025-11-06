@@ -13,9 +13,10 @@
   <div class="container">
     <div class="header">
       <h1>⚡ Power Monitor</h1>
+      <div id="spinner" class="spinner" style="display:none;"></div>
       <button id="themeToggle" onclick="toggleTheme()">🌙</button>
     </div>
-
+    
     <!-- Tabs -->
     <div class="tab">
       <button class="tablink active" onclick="openTab(event, 'statusTab')">Status</button>
@@ -28,7 +29,7 @@
 
     <!-- STATUS -->
     <div id="statusTab" class="tabcontent">
-      <div id="spinner" class="spinner" style="display:none;"></div>
+      <!-- <div id="spinner" class="spinner" style="display:none;"></div> -->
       <table id="statusTable">
         <tr>
           <th>Parameter</th>
@@ -60,7 +61,7 @@
     </div>
     <!-- BATTERY -->
     <div id="batteryTab" class="tabcontent" style="display:none">
-      <div id="spinnerBatt" class="spinner" style="display:none;"></div>
+      <!-- <div id="spinnerBatt" class="spinner" style="display:none;"></div> -->
       <table id="batteryTable">
         <tr>
           <th>Parameter</th>
@@ -129,7 +130,7 @@
 
     <!-- DEVICE INFO -->
     <div id="deviceTab" class="tabcontent" style="display:none">
-      <div id="spinnerDev" class="spinner" style="display:none;"></div>
+      <!-- <div id="spinnerDev" class="spinner" style="display:none;"></div> -->
       <table>
         <tr>
           <td>MAC Address</td>
@@ -167,7 +168,7 @@
           <input type="checkbox" id="autoRefresh" checked /> Auto-refresh
         </label>
       </div>
-      <div id="spinnerLogs" class="spinner" style="display:none;"></div>
+      <!-- <div id="spinnerLogs" class="spinner" style="display:none;"></div> -->
       <div id="logContainer" class="log-container">Loading logs...</div>
     </div>
   </div>

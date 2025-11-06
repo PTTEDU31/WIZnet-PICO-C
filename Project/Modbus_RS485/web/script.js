@@ -26,7 +26,7 @@ async function updateData() {
     spinner.style.display = "none";
   }
 }
-setInterval(updateData, 10000);
+setInterval(updateData, 5000);
 
 // ================== PAGE LOAD ==================
 window.onload = () => {
@@ -215,30 +215,30 @@ function clearLogs() {
 
 
 // // ================== BATTERY ==================
-// async function updateBattery() {
-//   const sp = document.getElementById("spinnerBatt");
-//   if (sp) sp.style.display = "block";
-//   try {
-//     const res = await fetch("/api/battery");
-//     if (!res.ok) throw new Error("HTTP " + res.status);
-//     const b = await res.json();
-//     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+async function updateBattery() {
+  const sp = document.getElementById("spinnerBatt");
+  if (sp) sp.style.display = "block";
+  try {
+    const res = await fetch("/api/battery");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const b = await res.json();
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
-//     set("psu_type", (b.psu_type ?? 48) + " V");
-//     set("batt_voltage", (b.batt_voltage ?? 0).toFixed(2) + " V");
-//     set("batt_current", (b.batt_current ?? 0).toFixed(3) + " A");
-//     set("batt_soc", (b.batt_soc ?? 0).toFixed(1) + " %");
-//     set("batt_runtime", (b.batt_runtime_min ?? 0).toFixed(1));
-//     set("batt_capacity", (b.batt_capacity_Ah ?? 0).toFixed(2) + " Ah");
-//     set("batt_flags", "0x" + ((b.batt_flags ?? 0) & 0xFFFF).toString(16).toUpperCase());
-//   } catch (e) {
-//     ["psu_type", "batt_voltage", "batt_current", "batt_soc", "batt_runtime", "batt_capacity", "batt_flags"]
-//       .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = "--"; });
-//   } finally {
-//     if (sp) sp.style.display = "none";
-//   }
-// }
-// setInterval(updateBattery, 10000);
+    set("psu_type", (b.psu_type ?? 48) + " V");
+    set("batt_voltage", (b.batt_voltage ?? 0).toFixed(2) + " V");
+    set("batt_current", (b.batt_current ?? 0).toFixed(3) + " A");
+    set("batt_soc", (b.batt_soc ?? 0).toFixed(1) + " %");
+    set("batt_runtime", (b.batt_runtime_min ?? 0).toFixed(1));
+    set("batt_capacity", (b.batt_capacity_Ah ?? 0).toFixed(2) + " Ah");
+    set("batt_flags", "0x" + ((b.batt_flags ?? 0) & 0xFFFF).toString(16).toUpperCase());
+  } catch (e) {
+    ["psu_type", "batt_voltage", "batt_current", "batt_soc", "batt_runtime", "batt_capacity", "batt_flags"]
+      .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = "--"; });
+  } finally {
+    if (sp) sp.style.display = "none";
+  }
+}
+setInterval(updateBattery, 5000);
 
 
 // ================== THEME ==================  

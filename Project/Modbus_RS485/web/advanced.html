@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>Advanced Settings</title>
@@ -34,7 +35,8 @@
 
             <tr>
               <th><label for="slaveAddr">PSU Slave Address (HEX)</label></th>
-              <td><input id="slaveAddr" type="text" maxlength="2" pattern="^[0-9A-Fa-f]{1,2}$" placeholder="e.g. 1D" /></td>
+              <td><input id="slaveAddr" type="text" maxlength="2" pattern="^[0-9A-Fa-f]{1,2}$" placeholder="e.g. 1D" />
+              </td>
             </tr>
 
             <tr>
@@ -77,72 +79,132 @@
 
       <!-- ========== MAC & Battery (table layout) ========== -->
       <section class="card">
-        <h2>MAC &amp; Battery Settings</h2>
-
+        <h2>Network & SNMP</h2>
         <table class="h-table">
-          <tbody>
-            <!-- MAC -->
-            <tr>
-              <th><label for="advMac">MAC Address</label></th>
-              <td>
-                <div class="row-inline">
-                  <input
-                    id="advMac"
-                    type="text"
-                    placeholder="00:08:DC:12:34:56"
-                    pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
-                    autocomplete="off"
-                    style="max-width:260px"
-                  />
-                  <button id="btnSaveMac" type="button">💾 Save MAC</button>
-                  <span id="macMsg" class="hint"></span>
-                </div>
-              </td>
-            </tr>
+          <tr>
+            <td>MAC Address</td>
+            <td id="mac">--</td>
+          </tr>
+          <tr>
+            <th>IP Address</th>
+            <td><input id="ipAddr" type="text"></td>
+          </tr>
+          <tr>
+            <th>Netmask</th>
+            <td><input id="netMask" type="text"></td>
+          </tr>
+          <tr>
+            <th>Gateway</th>
+            <td><input id="gateway" type="text"></td>
+          </tr>
+          <tr>
+            <th>DNS</th>
+            <td><input id="dns" type="text"></td>
+          </tr>
+          <tr>
+            <th>DHCP</th>
+            <td><select id="dhcpEnable">
+                <option value="0">Static</option>
+                <option value="1">DHCP</option>
+              </select></td>
+          </tr>
+          <tr>
+            <th>SNTP Enable</th>
+            <td><select id="sntpEnable">
+                <option value="0">Off</option>
+                <option value="1" selected>On</option>
+              </select></td>
+          </tr>
+          <tr>
+            <th>Web Interface</th>
+            <td><select id="webEnable">
+                <option value="0">Off</option>
+                <option value="1" selected>On</option>
+              </select></td>
+          </tr>
+        </table>
+      </section>
 
-            <!-- Battery / PSU -->
-            <tr>
-              <th><label for="advPsuType">PSU Type (V)</label></th>
-              <td>
-                <select id="advPsuType" style="max-width:120px">
-                  <option value="12">12</option>
-                  <option value="24">24</option>
-                  <option value="36">36</option>
-                  <option value="48" selected>48</option>
-                </select>
-              </td>
-            </tr>
+      <section class="card">
+        <h2>Battery Profile</h2>
+        <table class="h-table">
+          <select id="battType">
+            <option value="1">12V System</option>
+            <option value="2">24V System</option>
+            <option value="3">36V System</option>
+            <option value="4">48V System</option>
+          </select>
+          <tr>
+            <th>Capacity (Ah)</th>
+            <td><input id="battCapacity" type="number" step="0.1" /></td>
+          </tr>
+          <tr>
+            <th>Cutoff (V)</th>
+            <td><input id="battCutoff" type="number" step="0.1" /></td>
+          </tr>
+          <tr>
+            <th>Warning (V)</th>
+            <td><input id="battWarn" type="number" step="0.1" /></td>
+          </tr>
+          <tr>
+            <th>Critical (V)</th>
+            <td><input id="battCritical" type="number" step="0.1" /></td>
+          </tr>
+          <tr>
+            <th>Site ID</th>
+            <td><input id="siteId" type="text" /></td>
+          </tr>
+          <tr>
+            <th>Trap Dest</th>
+            <td><input id="trapDest" type="text" /></td>
+          </tr>
+          <tr>
+            <th>Trap Port</th>
+            <td><input id="trapPort" type="number" min="1" max="65535" /></td>
+          </tr>
+          <tr>
+            <th>Current Offset</th>
+            <td><input id="currOffset" type="number" step="0.01" /></td>
+          </tr>
+          <tr>
+            <th>Voltage Scale</th>
+            <td><input id="voltScale" type="number" step="0.01" /></td>
+          </tr>
+          <tr>
+            <th>Auto Shutdown</th>
+            <td><input id="autoShutdown" type="checkbox" /> Enable automatic system shutdown</td>
+          </tr>
+          <tr>
+            <th>Learned Capacity (Avg)</th>
+            <td><input id="learnAvg" type="number" min="0" step="1" /> mAh</td>
+          </tr>
+          <tr>
+            <th>Learned Capacity (Best)</th>
+            <td><input id="learnBest" type="number" min="0" step="1" /> mAh</td>
+          </tr>
+        </table>
+      </section>
 
-            <tr>
-              <th><label for="advBattAh">Battery Capacity (Ah)</label></th>
-              <td><input id="advBattAh" type="number" step="0.1" placeholder="20.0" style="max-width:160px" /></td>
-            </tr>
-
-            <tr>
-              <th><label for="advBattCutoff">Battery Cutoff (V)</label></th>
-              <td><input id="advBattCutoff" type="number" step="0.1" placeholder="48.0" style="max-width:160px" /></td>
-            </tr>
-
-            <tr>
-              <th><label for="advBattFull">Battery Full (V)</label></th>
-              <td><input id="advBattFull" type="number" step="0.1" placeholder="58.4" style="max-width:160px" /></td>
-            </tr>
-
-            <tr>
-              <th><label for="advRuntimeFactor">Runtime Factor</label></th>
-              <td><input id="advRuntimeFactor" type="number" step="0.01" placeholder="1.00" style="max-width:120px" /></td>
-            </tr>
-
-            <tr>
-              <th></th>
-              <td>
-                <div class="row-inline">
-                  <button id="btnSaveBattery" type="button">💾 Save Battery Config</button>
-                  <span id="battMsg" class="hint"></span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
+      <section class="card">
+        <h2>Battery Warnings</h2>
+        <table class="h-table">
+          <tr>
+            <th>Time Remaining Warnings</th>
+            <td>
+              <label><input id="warn60" type="checkbox" /> 60 min</label>
+              <label><input id="warn30" type="checkbox" /> 30 min</label>
+              <label><input id="warn15" type="checkbox" /> 15 min</label>
+              <label><input id="warn5" type="checkbox" /> 5 min</label>
+            </td>
+          </tr>
+          <tr>
+            <th>Battery SOC Warnings</th>
+            <td>
+              <label><input id="warnSoc30" type="checkbox" /> SOC &lt; 30%</label>
+              <label><input id="warnSoc20" type="checkbox" /> SOC &lt; 20%</label>
+              <label><input id="warnSoc10" type="checkbox" /> SOC &lt; 10%</label>
+            </td>
+          </tr>
         </table>
       </section>
 
@@ -156,4 +218,5 @@
 
   <script src="advanced.js"></script>
 </body>
+
 </html>

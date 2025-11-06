@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -79,6 +80,7 @@ typedef enum
  ****************************************************************************/
 typedef struct _st_http_socket
 {
+    // const web_asset_t *asset;
     uint8_t  sock_status;
     uint8_t  file_name[MAX_CONTENT_NAME_LEN];
     uint32_t file_start;

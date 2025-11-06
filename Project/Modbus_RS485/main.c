@@ -194,7 +194,7 @@ void core1_main(void)
         // -------------------------------------------------------
         // (B) Modbus polling định kỳ
         // -------------------------------------------------------
-        if (now - last_modbus >= 1000) // 1000ms/poll
+        if (now - last_modbus >= 10000) // 1000ms/poll
         {
             last_modbus = now;
             // printf("[MODBUS] Polling PSU slave %d...\n", cfg->psu_slave_addr);

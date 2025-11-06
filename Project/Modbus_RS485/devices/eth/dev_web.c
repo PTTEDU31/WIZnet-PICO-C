@@ -9,7 +9,7 @@
 #include "web_assets.h"
 
 #define ETHERNET_BUF_MAX_SIZE (32*1024) // 32KB
-#define HTTP_SOCKET_MAX_NUM   8
+#define HTTP_SOCKET_MAX_NUM   4
 
 static uint8_t http_tx_buf[ETHERNET_BUF_MAX_SIZE];
 static uint8_t http_rx_buf[ETHERNET_BUF_MAX_SIZE];
