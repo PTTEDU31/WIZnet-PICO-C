@@ -37,7 +37,7 @@ static mutex_t g_flash_mutex;
 // ============================
 // Core1 Stack
 // ============================
-__attribute__((aligned(16))) static uint32_t core1_stack[16384 / sizeof(uint32_t)];
+__attribute__((aligned(16))) static uint32_t core1_stack[32768 / sizeof(uint32_t)];
 
 // ===========================================================
 // RS485 Direction Control
@@ -172,7 +172,7 @@ void core1_main(void)
     uint32_t last_modbus_batt = 0;
     uint8_t mgr[4] = {cfg->snmp_manager_ip[0], cfg->snmp_manager_ip[1], cfg->snmp_manager_ip[2], cfg->snmp_manager_ip[3]};
     uint8_t agt[4] = {cfg->ip[0], cfg->ip[1], cfg->ip[2], cfg->ip[3]};
-    // snmp_trap_test_demo(mgr);
+    snmp_trap_test_demo(mgr);
     // snmp_trap_quick_test(mgr, agt);
 
     // ===========================================================
@@ -194,7 +194,7 @@ void core1_main(void)
         // -------------------------------------------------------
         // (B) Modbus polling định kỳ
         // -------------------------------------------------------
-        if (now - last_modbus >= 10000) // 1000ms/poll
+        if (now - last_modbus >= 100) // 1000ms/poll
         {
             last_modbus = now;
             // printf("[MODBUS] Polling PSU slave %d...\n", cfg->psu_slave_addr);
@@ -213,21 +213,22 @@ void core1_main(void)
             // // // Fault & SNMP trap
             uint16_t fault_raw = 0;
             modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);
+
+            psu_local.batt_runtime =psu_calculate_runtime_minutes(cfg->psu.battery_capacity_ah, lifepo4_voltage_to_soc(psu_local.batt_voltage), psu_local.batt_current);
             psu_data_update(&psu_local);
-            snmp_process_fault_trap(managerIP, agentIP);
+            
         }
+
         if (now - last_modbus_batt >= 3000) // 300ms/poll
         {
             psu_data_t psu_local = psu_data_read();
             last_modbus_batt = now;
-            uint32_t runtime = psu_calculate_runtime_minutes(cfg->psu.battery_capacity_ah,lifepo4_voltage_to_soc(psu_local.batt_voltage),psu_local.batt_current);
-            printf("Runtime:  %lu min \n",(unsigned long)runtime);
-            psu_cycles_print_current();
+            printf("Runtime:  %lu min \n", (unsigned long)psu_local.batt_runtime);
+            // psu_cycles_print_current();
+
+            snmp_process_fault_trap(managerIP, agentIP);
         }
 
-        // -------------------------------------------------------
-        // (D) Debug pattern: đổi trạng thái LED 5s một lần
-        // -------------------------------------------------------
         if (now - last_led > 5000)
         {
             static uint8_t idx = 0;
@@ -260,21 +261,20 @@ int main(void)
     mutex_init(&g_flash_mutex);
     mutex_enter_blocking(&g_flash_mutex);
 
-    
     start_core1();
-    
+
     flash_safe_execute_core_init();
     printf("\r\n=== RP2040 Modbus PSU Monitor + W5500 (Web + SNTP + DHCP) ===\r\n");
-    
+
     if (!app_cfg_init())
     {
-        
+
         printf("[CFG] Invalid or empty config, using defaults.\n");
     }
     else
-    printf("[CFG] Configuration loaded successfully.\n");
+        printf("[CFG] Configuration loaded successfully.\n");
     psu_data_init();
-    
+
     mutex_exit(&g_flash_mutex);
     const app_config_t *cfg = app_cfg_get();
     printf("[CFG] Device: %s | Slave: %d | DHCP: %d\n",

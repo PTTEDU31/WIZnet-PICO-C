@@ -1068,7 +1068,6 @@ int32_t snmp_sendTrapV2(uint8_t *managerIP, int8_t *community,
 	packet_trap[len_pdu_pos] = (uint8_t)(idx - (len_pdu_pos + 1));
 	packet_trap[len_msg_pos] = (uint8_t)(idx - (len_msg_pos + 1));
 
-	// Gửi UDP (giống snmp_sendTrap v1)
 	socket(SOCK_SNMP_TRAP, Sn_MR_UDP, PORT_SNMP_TRAP, 0);
 	sendto(SOCK_SNMP_TRAP, packet_trap, idx, managerIP, PORT_SNMP_TRAP);
 	return SNMP_SUCCESS;

@@ -23,24 +23,40 @@ extern "C" {
 //  - GROUP_MEAS = 1: các đo lường PSU (VIN/VOUT/VSET/IOUT)
 //  - GROUP_BATT = 2: các thông số Battery (VBAT/SOC/Capacity/Remain/Runtime/Temp/WarnFlags)
 
-#define GROUP_MEAS   1
-#define GROUP_BATT   2
+#define GROUP_AC_POWER    1
+#define GROUP_BATT        2
+#define GROUP_OUTPUT      3
+#define GROUP_ENV         4
+#define GROUP_SYSTEM      5
+// ===== AC leaves =====
+#define LEAF_ACVIN     1
+#define LEAF_AC_STATUS    2
+#define LEAF_AC_LOSS_TIME   3
 
-// ===== MEAS leaves =====
-#define LEAF_VIN     1
-#define LEAF_VOUT    2
-#define LEAF_VSET    3
-#define LEAF_IOUT    4
 
 // ===== BATT leaves =====
 #define LEAF_BAT_V   1   // VBAT (0.01V)
-#define LEAF_BAT_SOC 2   // SOC (0.1%)
-#define LEAF_BAT_CAP 3   // Capacity Ah (0.01Ah)
+#define LEAF_BAT_CAP 2   // Capacity Ah (0.01Ah)
+#define LEAF_BAT_SOC 3   // SOC (0.1%)
 #define LEAF_BAT_REM 4   // Remaining Ah (0.01Ah)
 #define LEAF_BAT_RT  5   // Runtime (minutes)
 #define LEAF_BAT_TMP 6   // Battery Temp (0.01°C)
-// #define LEAF_CHG_MD  7 // Charger mode (enum) — nếu bật lại
+#define LEAF_CHG_MD  7 // Charger mode (enum) — nếu bật lại
 #define LEAF_BAT_WRN 8   // Warn flags (bitmask)
+
+// ===== Output leaves =====
+#define LEAF_OUT_V    1   // Output Voltage (0.01V)
+#define LEAF_OUT_I    2   // Output Current (mA)
+#define LEAF_OUT_P    3   // Output Power (W)
+#define LEAF_OUT_S    4   // Output Status (enum)
+// ===== Environment leaves =====
+#define LEAF_ENV_TEMP   1   // Temp (0.01°C)
+#define LEAF_ENV_HUMI   2   // Humidity (0.1%RH)
+// ===== System leaves =====
+#define LEAF_SYS_UPTIME   1   // System Uptime (minutes)
+#define LEAF_SYS_HWFAULT  2   // Hardware Fault (bitmask)
+
+
 
 
 // /* ===========================
@@ -67,7 +83,7 @@ typedef enum {
   TRAP_OCP_CLEARED          = 101
 } trap_code_t;
 
-/* ======= Trap theo SPEC 5.1–5.2 (specificTrap mã rõ ràng) ======= */
+/* ======= Trap theo SPEC 5.1–5.2======= */
 typedef enum {
   /* Severity 1 – Informational */
   ES_TRAP_AC_POWER_RESTORED         = 101,

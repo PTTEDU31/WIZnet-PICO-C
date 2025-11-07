@@ -612,6 +612,14 @@ void httpServer_user_init(void)
     httpServer_regAPI("api/logs", api_logs);
     httpServer_regAPI("api/config", api_config);
     httpServer_regAPI("api/cycles", api_cycles);
+    httpServer_regAPI("api/reboot", [](uint8_t s, void *req)
+    {
+        (void)req;
+        http_send_status_json(s, 200, "{\"result\":\"rebooting in 1s\"}");
+        watchdog_enable(1000, 1); // Reboot trong 1s
+        while (1)
+            tight_loop_contents();
+    });
 
     printf("[WEB] User APIs registered.\n");
 }

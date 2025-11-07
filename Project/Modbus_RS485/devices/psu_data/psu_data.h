@@ -62,6 +62,7 @@ typedef struct
     float batt_runtime;   // Estimated runtime (minutes)
     float batt_capacity;  // Nominal capacity (Ah)
     float batt_temp;      // Battery temperature (°C)
+    uint8_t charger_mode; // Charger mode (enum)
     battery_flags_t batt_flags;
 } psu_data_t;
 
