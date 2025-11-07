@@ -1,7 +1,60 @@
+// --------------------- Global Spinner helper ---------------------
+const Spinner = (function () {
+  let count = 0;                // ref-count
+  let firstShownAt = 0;         // timestamp when spinner first shown
+  const MIN_SHOW_MS = 250;      // minimum visible time to prevent flicker
+
+  function el() {
+    return document.getElementById("spinner");
+  }
+
+  function now() { return performance.now ? performance.now() : Date.now(); }
+
+  function show() {
+    const s = el();
+    if (!s) return;             // null-safe
+    count = Math.max(0, count) + 1;
+    if (count === 1) {
+      firstShownAt = now();
+      s.style.display = "block";
+      s.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function hide() {
+    const s = el();
+    if (!s) return;
+    count = Math.max(0, count - 1);
+    if (count <= 0) {
+      const elapsed = now() - firstShownAt;
+      const remaining = Math.max(0, MIN_SHOW_MS - elapsed);
+      // ensure spinner visible at least MIN_SHOW_MS
+      setTimeout(() => {
+        // double-check counter after delay
+        if (count <= 0) {
+          s.style.display = "none";
+          s.setAttribute("aria-hidden", "true");
+          count = 0;
+          firstShownAt = 0;
+        }
+      }, remaining);
+    }
+  }
+
+  function reset() {
+    const s = el();
+    count = 0;
+    firstShownAt = 0;
+    if (s) { s.style.display = "none"; s.setAttribute("aria-hidden", "true"); }
+  }
+
+  return { show, hide, reset, _getCount: () => count };
+})();
+
 // ================== STATUS ==================
 async function updateData() {
   const spinner = document.getElementById("spinner");
-  spinner.style.display = "block";
+   Spinner.show(true);
   try {
     const res = await fetch("/api/status");
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -23,7 +76,7 @@ async function updateData() {
     document.getElementById("fault_raw").textContent = "Disconnected";
     document.getElementById("fault_detail").textContent = "No data";
   } finally {
-    spinner.style.display = "none";
+    Spinner.hide(true);
   }
 }
 setInterval(updateData, 5000);
@@ -174,8 +227,7 @@ async function saveConfig() {
 }
 // ================== DEVICE ==================
 async function refreshDevice() {
-  const sp = document.getElementById("spinnerDev");
-  sp.style.display = "block";
+   Spinner.show(true);
   try {
     const res = await fetch("/api/device");
     const info = await res.json();
@@ -187,15 +239,14 @@ async function refreshDevice() {
   } catch (err) {
     mac.textContent = "--";
   } finally {
-    sp.style.display = "none";
+    Spinner.hide(true);
   }
 }
 
 // ================== LOGS ==================
 async function refreshLogs() {
-  const sp = document.getElementById("spinnerLogs");
+   Spinner.show(true);
   const container = document.getElementById("logContainer");
-  sp.style.display = "block";
   try {
     const res = await fetch("/api/logs");
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -206,7 +257,7 @@ async function refreshLogs() {
   } catch {
     container.textContent = "⚠️ Failed to fetch logs.";
   } finally {
-    sp.style.display = "none";
+    Spinner.hide(true);
   }
 }
 function clearLogs() {
@@ -216,8 +267,7 @@ function clearLogs() {
 
 // // ================== BATTERY ==================
 async function updateBattery() {
-  const sp = document.getElementById("spinnerBatt");
-  if (sp) sp.style.display = "block";
+   Spinner.show(true);
   try {
     const res = await fetch("/api/battery");
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -235,7 +285,7 @@ async function updateBattery() {
     ["psu_type", "batt_voltage", "batt_current", "batt_soc", "batt_runtime", "batt_capacity", "batt_flags"]
       .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = "--"; });
   } finally {
-    if (sp) sp.style.display = "none";
+   Spinner.hide(true);
   }
 }
 setInterval(updateBattery, 5000);
