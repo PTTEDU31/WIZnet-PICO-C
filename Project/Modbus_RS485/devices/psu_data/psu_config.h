@@ -57,7 +57,7 @@ typedef struct
     
     // Site identification
     char site_identifier[32];        // "Building-5-IDF2"
-    char snmp_trap_dest[64];         // NOC IP address
+    uint8_t snmp_trap_dest[4];         // NOC IP address
     uint16_t snmp_trap_port;         // 162
     
     // Advanced settings

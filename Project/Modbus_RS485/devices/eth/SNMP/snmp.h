@@ -13,10 +13,10 @@ extern "C" {
 
 #define SNMP_V1						0
 #define SNMP_V2C  1
-#define MAX_OID						12
-#define MAX_STRING					64
-#define MAX_SNMPMSG_LEN				512
-#define MAX_TRAPMSG_LEN				512
+#define MAX_OID						22
+#define MAX_STRING					128
+#define MAX_SNMPMSG_LEN				1024
+#define MAX_TRAPMSG_LEN				1024
 
 // SNMP Error code
 #define SNMP_SUCCESS				0

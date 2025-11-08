@@ -64,6 +64,8 @@ typedef struct
     float batt_temp;      // Battery temperature (°C)
     uint8_t charger_mode; // Charger mode (enum)
     battery_flags_t batt_flags;
+
+    uint32_t AC_loss_time_ms; // Thời gian mất AC (giây)
 } psu_data_t;
 
 // ===== 1) Thêm struct cho 1 chu kỳ =====

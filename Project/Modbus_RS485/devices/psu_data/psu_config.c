@@ -1,6 +1,7 @@
 #include "psu_config.h"
 #include <string.h>
 #include <stdio.h>
+#include "app_config.h"
 
 // =============================================================
 // Voltage Profiles Database (Based on LiFePO4 chemistry)
@@ -102,26 +103,7 @@ const voltage_profile_t g_voltage_profiles[BATT_TYPE_COUNT] = {
 // =============================================================
 // Global configuration instance (default: 48V, 10Ah)
 // =============================================================
-psu_config_t g_psu_config = {
-    .battery_type = BATT_TYPE_48V,
-    .battery_capacity_ah = 10.0f,
-    .voltage_cutoff_low = 48.0f,
-    .voltage_warning = 50.4f,
-    .voltage_critical = 49.6f,
-    .warning_60min_enabled = 1,
-    .warning_30min_enabled = 1,
-    .warning_15min_enabled = 1,
-    .warning_5min_enabled = 1,
-    .warning_soc30_enabled = 1,
-    .warning_soc20_enabled = 1,
-    .warning_soc10_enabled = 1,
-    .site_identifier = "Unknown-Site",
-    .snmp_trap_dest = "192.168.1.100",
-    .snmp_trap_port = 162,
-    .current_sensor_offset = 0.0f,
-    .voltage_sensor_scale = 1.0f,
-    .enable_auto_shutdown = 1
-};
+psu_config_t g_psu_config = {0};
 
 // =============================================================
 // Internal helper: Linear interpolation
@@ -143,6 +125,7 @@ void psu_config_init(void)
     // psu_config_load();
     
     // Ensure voltage thresholds match battery type
+    g_psu_config = app_cfg_get()->psu;
     psu_config_set_battery_type(g_psu_config.battery_type);
 }
 

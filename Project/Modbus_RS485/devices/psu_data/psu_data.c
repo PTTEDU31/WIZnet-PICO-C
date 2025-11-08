@@ -34,7 +34,7 @@ void psu_data_init(void)
     memset(&g_cycles, 0, sizeof(g_cycles));
     g_cycles.last_tick_ms = now_ms();
     g_cycles.active_charging = is_charging(g_psu.batt_current);
-
+    psu_config_init();
     psu_cycles_load_from_flash();
 }
 

@@ -153,6 +153,7 @@ static void add_ip_str(cJSON *o, const char *k, const uint8_t ip[4])
 static void api_status(uint8_t s, void *req)
 {
     (void)req;
+    app_config_t* cfg = app_cfg_get();
     psu_data_t psu = psu_data_read();
 
     cJSON *r = cJSON_CreateObject();
@@ -173,6 +174,7 @@ static void api_status(uint8_t s, void *req)
     cJSON_AddNumberToObject(r, "ac_fail", psu.fault.bits.ac_fail);
     cJSON_AddNumberToObject(r, "op_off", psu.fault.bits.op_off);
     // Battery block
+    cJSON_AddNumberToObject(r, "batt_type", cfg->psu.battery_type);
     cJSON_AddNumberToObject(r, "batt_voltage", psu.batt_voltage);
     cJSON_AddNumberToObject(r, "batt_current", psu.batt_current);
     cJSON_AddNumberToObject(r, "batt_soc", psu.batt_soc);
@@ -411,26 +413,26 @@ static void api_config(uint8_t s, void *req_)
         cJSON *p = cJSON_GetObjectItemCaseSensitive(j, "profile");
         if (cJSON_IsObject(p))
         {
-            // type: 12/24/36/48 hoặc "12V"
-            cJSON *jt = cJSON_GetObjectItemCaseSensitive(p, "battery_type");
-            if (cJSON_IsNumber(jt))
-            {
-                int t = jt->valueint;
-                if (t == 12 || t == 24 || t == 36 || t == 48)
-                    cfg.psu.battery_type = (battery_type_t)t;
-            }
-            else if (cJSON_IsString(jt) && jt->valuestring)
-            {
-                const char *s = jt->valuestring;
-                if (!strcmp(s, "12") || !strcmp(s, "12V"))
-                    cfg.psu.battery_type = 12;
-                else if (!strcmp(s, "24") || !strcmp(s, "24V"))
-                    cfg.psu.battery_type = 24;
-                else if (!strcmp(s, "36") || !strcmp(s, "36V"))
-                    cfg.psu.battery_type = 36;
-                else if (!strcmp(s, "48") || !strcmp(s, "48V"))
-                    cfg.psu.battery_type = 48;
-            }
+            // cJSON *jt = cJSON_GetObjectItemCaseSensitive(p, "battery_type");
+            // if (cJSON_IsNumber(jt))
+            // {
+            //     int t = jt->valueint;
+            //     if (t == 1 || t == 2 || t == 3 || t == 4)
+            //         cfg.psu.battery_type = (battery_type_t)t;
+            // }
+            // else if (cJSON_IsString(jt) && jt->valuestring)
+            // {
+            //     const char *s = jt->valuestring;
+            //     if (!strcmp(s, "12") || !strcmp(s, "12V"))
+            //         cfg.psu.battery_type = 12;
+            //     else if (!strcmp(s, "24") || !strcmp(s, "24V"))
+            //         cfg.psu.battery_type = 24;
+            //     else if (!strcmp(s, "36") || !strcmp(s, "36V"))
+            //         cfg.psu.battery_type = 36;
+            //     else if (!strcmp(s, "48") || !strcmp(s, "48V"))
+            //         cfg.psu.battery_type = 48;
+            // }
+            cfg.psu.battery_type = json_get_i(p, "battery_type", cfg.psu.battery_type);
             cfg.psu.battery_capacity_ah = json_get_f(p, "capacity_ah", cfg.psu.battery_capacity_ah);
             cfg.psu.voltage_cutoff_low = json_get_f(p, "cutoff_low", cfg.psu.voltage_cutoff_low);
             cfg.psu.voltage_warning = json_get_f(p, "warning", cfg.psu.voltage_warning);
@@ -445,7 +447,10 @@ static void api_config(uint8_t s, void *req_)
             cfg.psu.warning_soc10_enabled = (uint8_t)json_get_i(p, "warn_soc10", cfg.psu.warning_soc10_enabled);
 
             json_get_s(p, "site_identifier", cfg.psu.site_identifier, sizeof(cfg.psu.site_identifier), cfg.psu.site_identifier);
-            json_get_s(p, "snmp_trap_dest", cfg.psu.snmp_trap_dest, sizeof(cfg.psu.snmp_trap_dest), cfg.psu.snmp_trap_dest);
+            // json_get_s(p, "snmp_trap_dest", cfg.psu.snmp_trap_dest, sizeof(cfg.psu.snmp_trap_dest), cfg.psu.snmp_trap_dest);
+            cJSON *p_ip_snmp = cJSON_GetObjectItemCaseSensitive(p, "snmp_trap_dest");
+            if (cJSON_IsString(p_ip_snmp) && p_ip_snmp->valuestring)
+                parse_ip4(p_ip_snmp->valuestring, cfg.psu.snmp_trap_dest);
             // port
             cJSON *jp = cJSON_GetObjectItemCaseSensitive(p, "snmp_trap_port");
             if (cJSON_IsNumber(jp) && jp->valueint > 0 && jp->valueint < 65536)
@@ -536,7 +541,7 @@ static void api_config(uint8_t s, void *req_)
         cJSON_AddNumberToObject(p, "warn_soc10", cfg.psu.warning_soc10_enabled);
 
         cJSON_AddStringToObject(p, "site_identifier", cfg.psu.site_identifier);
-        cJSON_AddStringToObject(p, "snmp_trap_dest", cfg.psu.snmp_trap_dest);
+        add_ip_str(p, "snmp_trap_dest", cfg.psu.snmp_trap_dest);
         cJSON_AddNumberToObject(p, "snmp_trap_port", cfg.psu.snmp_trap_port);
         cJSON_AddNumberToObject(p, "current_sensor_offset", cfg.psu.current_sensor_offset);
         cJSON_AddNumberToObject(p, "voltage_sensor_scale", cfg.psu.voltage_sensor_scale);
@@ -600,6 +605,17 @@ static void api_cycles(uint8_t s, void *req_)
     cJSON_Delete(root);
 }
 
+// Định nghĩa hàm callback
+static void api_reboot_handler(uint8_t s, void *req)
+{
+    (void)req;
+    http_send_status_json(s, 200, "{\"result\":\"rebooting in 1s\"}");
+
+    // Bật watchdog reset sau 1 giây
+    watchdog_enable(1000, 1);
+    while (1)
+        tight_loop_contents();
+}
 /* ===========================================================
  * Register APIs
  * =========================================================== */
@@ -612,14 +628,5 @@ void httpServer_user_init(void)
     httpServer_regAPI("api/logs", api_logs);
     httpServer_regAPI("api/config", api_config);
     httpServer_regAPI("api/cycles", api_cycles);
-    httpServer_regAPI("api/reboot", [](uint8_t s, void *req)
-    {
-        (void)req;
-        http_send_status_json(s, 200, "{\"result\":\"rebooting in 1s\"}");
-        watchdog_enable(1000, 1); // Reboot trong 1s
-        while (1)
-            tight_loop_contents();
-    });
-
-    printf("[WEB] User APIs registered.\n");
+    httpServer_regAPI("api/reboot", api_reboot_handler);
 }

@@ -60,8 +60,7 @@ static bool repeating_timer_cb(struct repeating_timer *t)
 // ===========================================================
 volatile uint32_t g_core1_heartbeat_ms = 0;
 #define CORE1_HB_INTERVAL_MS 500
-#define CORE1_HB_TIMEOUT_MS 5000
-
+#define CORE1_HB_TIMEOUT_MS  5000
 // ===========================================================
 // Bộ nhớ
 // ===========================================================
@@ -170,9 +169,9 @@ void core1_main(void)
     uint32_t last_led = 0;
     uint32_t last_modbus = 0;
     uint32_t last_modbus_batt = 0;
-    uint8_t mgr[4] = {cfg->snmp_manager_ip[0], cfg->snmp_manager_ip[1], cfg->snmp_manager_ip[2], cfg->snmp_manager_ip[3]};
-    uint8_t agt[4] = {cfg->ip[0], cfg->ip[1], cfg->ip[2], cfg->ip[3]};
-    snmp_trap_test_demo(mgr);
+    // uint8_t mgr[4] = {cfg->snmp_manager_ip[0], cfg->snmp_manager_ip[1], cfg->snmp_manager_ip[2], cfg->snmp_manager_ip[3]};
+    // uint8_t agt[4] = {cfg->ip[0], cfg->ip[1], cfg->ip[2], cfg->ip[3]};
+    // snmp_trap_test_demo(mgr);
     // snmp_trap_quick_test(mgr, agt);
 
     // ===========================================================
@@ -194,10 +193,9 @@ void core1_main(void)
         // -------------------------------------------------------
         // (B) Modbus polling định kỳ
         // -------------------------------------------------------
-        if (now - last_modbus >= 100) // 1000ms/poll
+        if (now - last_modbus >= 100)
         {
             last_modbus = now;
-            // printf("[MODBUS] Polling PSU slave %d...\n", cfg->psu_slave_addr);
 
             uint8_t slave_id = cfg->psu_slave_addr;
             psu_data_t psu_local = {0};
@@ -213,17 +211,31 @@ void core1_main(void)
             // // // Fault & SNMP trap
             uint16_t fault_raw = 0;
             modbus_poll_fault_status(slave_id, &fault_raw, &psu_local.fault);
+            if (psu_local.fault.bits.ac_fail)
+            {
+                psu_data_t psu_lc = psu_data_read();
+                psu_local.AC_loss_time_ms = psu_lc.AC_loss_time_ms + 100;
 
-            psu_local.batt_runtime =psu_calculate_runtime_minutes(cfg->psu.battery_capacity_ah, lifepo4_voltage_to_soc(psu_local.batt_voltage), psu_local.batt_current);
+            }
+            else
+            {
+                psu_local.AC_loss_time_ms = 0;
+            }
+            psu_local.batt_soc = lifepo4_voltage_to_soc(psu_local.batt_voltage);
+            psu_local.batt_runtime = psu_calculate_runtime_minutes(cfg->psu.battery_capacity_ah, psu_local.batt_soc, psu_local.batt_current);
             psu_data_update(&psu_local);
-            
         }
 
-        if (now - last_modbus_batt >= 3000) // 300ms/poll
+        if (now - last_modbus_batt >= 5000)
         {
             psu_data_t psu_local = psu_data_read();
             last_modbus_batt = now;
             printf("Runtime:  %lu min \n", (unsigned long)psu_local.batt_runtime);
+            printf("SOC:      %.1f %%\n", psu_local.batt_soc);
+            printf("Vbat:     %.2f V\n", psu_local.batt_voltage);
+            printf("Ibat:     %.2f A\n", psu_local.batt_current);
+            printf("AC Loss:  %lu s\n", (unsigned long)(psu_local.AC_loss_time_ms / 1000));
+            printf("-----------------------\n");
             // psu_cycles_print_current();
 
             snmp_process_fault_trap(managerIP, agentIP);
@@ -236,10 +248,6 @@ void core1_main(void)
             led_set_state((device_state_t)idx);
             last_led = now;
         }
-
-        // -------------------------------------------------------
-        // (E) Nhường CPU cho hệ thống (non-blocking)
-        // -------------------------------------------------------
         tight_loop_contents();
     }
 }
@@ -273,8 +281,8 @@ int main(void)
     }
     else
         printf("[CFG] Configuration loaded successfully.\n");
-    psu_data_init();
 
+    psu_data_init();
     mutex_exit(&g_flash_mutex);
     const app_config_t *cfg = app_cfg_get();
     printf("[CFG] Device: %s | Slave: %d | DHCP: %d\n",
@@ -309,11 +317,11 @@ int main(void)
             uint32_t hb = g_core1_heartbeat_ms;
             if (hb != 0 && (now - hb) > CORE1_HB_TIMEOUT_MS)
             {
-                // printf("[WDT] Core1 heartbeat timeout (> %d ms). Restarting core1...\n",
-                //        CORE1_HB_TIMEOUT_MS);
-                // multicore_reset_core1();
-                // sleep_ms(10);
-                // multicore_launch_core1(core1_entry);
+                printf("[WDT] Core1 heartbeat timeout (> %d ms). Restarting core1...\n",
+                       CORE1_HB_TIMEOUT_MS);
+                multicore_reset_core1();
+                sleep_ms(10);
+                start_core1();
             }
         }
 

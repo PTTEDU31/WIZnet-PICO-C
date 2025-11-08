@@ -269,12 +269,12 @@ function clearLogs() {
 async function updateBattery() {
    Spinner.show(true);
   try {
-    const res = await fetch("/api/battery");
+    const res = await fetch("/api/status");
     if (!res.ok) throw new Error("HTTP " + res.status);
     const b = await res.json();
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
-    set("psu_type", (b.psu_type ?? 48) + " V");
+    set("batt_type", ((b.batt_type ?? 48) + 1 )*12 + " V");
     set("batt_voltage", (b.batt_voltage ?? 0).toFixed(2) + " V");
     set("batt_current", (b.batt_current ?? 0).toFixed(3) + " A");
     set("batt_soc", (b.batt_soc ?? 0).toFixed(1) + " %");
@@ -282,7 +282,7 @@ async function updateBattery() {
     set("batt_capacity", (b.batt_capacity_Ah ?? 0).toFixed(2) + " Ah");
     set("batt_flags", "0x" + ((b.batt_flags ?? 0) & 0xFFFF).toString(16).toUpperCase());
   } catch (e) {
-    ["psu_type", "batt_voltage", "batt_current", "batt_soc", "batt_runtime", "batt_capacity", "batt_flags"]
+    ["batt_type", "batt_voltage", "batt_current", "batt_soc", "batt_runtime", "batt_capacity", "batt_flags"]
       .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = "--"; });
   } finally {
    Spinner.hide(true);

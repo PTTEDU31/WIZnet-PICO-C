@@ -117,8 +117,7 @@ def generate_asset_table(files):
     for f in files:
         varname = filename_to_varname(f)
         mime = get_mime_type(f)
-        
-        # ✅ FIX: Chỉ đánh dấu gzipped cho file thực sự được nén
+  
         is_text_file = f.endswith(('.html', '.css', '.js', '.json', '.svg'))
         gzipped = "1" if (ENABLE_GZIP and is_text_file) else "0"
         

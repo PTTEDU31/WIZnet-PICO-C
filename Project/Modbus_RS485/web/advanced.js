@@ -50,7 +50,7 @@ function collectConfig() {
     timezone: parseInt(document.getElementById("timezone")?.value ?? 7),
 
     // --- Network ---
-    mac: document.getElementById("netMask")?.value.trim().toUpperCase() ?? "00:08:DC:12:34:56",
+    mac: document.getElementById("mac")?.value.trim().toUpperCase() ?? "00:08:DC:12:34:56",
     ip: document.getElementById("ipAddr")?.value.trim(),
     mask: document.getElementById("netMask")?.value.trim(),
     gw: document.getElementById("gateway")?.value.trim(),

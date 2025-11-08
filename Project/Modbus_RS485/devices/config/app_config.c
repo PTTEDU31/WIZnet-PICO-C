@@ -128,7 +128,10 @@ void app_cfg_reset_default(void) {
 
     // Site & SNMP trap dest
     strcpy(g_cfg.psu.site_identifier, "Building-5-IDF2");
-    strcpy(g_cfg.psu.snmp_trap_dest,  "192.168.137.1");
+    g_cfg.psu.snmp_trap_dest[0] = 192;
+    g_cfg.psu.snmp_trap_dest[1] = 168;
+    g_cfg.psu.snmp_trap_dest[2] = 137;
+    g_cfg.psu.snmp_trap_dest[3] = 1;
     g_cfg.psu.snmp_trap_port = 162;
 
     // Advanced calib

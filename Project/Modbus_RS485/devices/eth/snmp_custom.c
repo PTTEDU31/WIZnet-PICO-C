@@ -14,6 +14,14 @@ static uint8_t OID_TRAP_SEVERITY[16];
 #define GROUP_TRAP 10
 
 static uint8_t OID_TRAP_SITE_ID[16];
+static uint8_t OID_TRAP_BATT_VOLT[16];
+static uint8_t OID_TRAP_CURRENT[16];
+static uint8_t OID_TRAP_BATT_SOC[16];
+static uint8_t OID_TRAP_BATT_RUNTIME[16];
+static uint8_t OID_TRAP_MESSAGE[16];
+static uint8_t OID_TRAP_TEMP[16];
+static uint8_t OID_TRAP_AC_STATUS[16];
+static uint8_t OID_TRAP_AC_LOSSTIME[16];
 // uint8_t OID_TRAP_CODE[] = {1, 3, 6, 1, 4, 1, 99999, 10, 2, 0};
 // uint8_t OID_TRAP_MESSAGE[] = {1, 3, 6, 1, 4, 1, 99999, 10, 3, 0};
 // uint8_t OID_TRAP_TIMESTAMP[] = {1, 3, 6, 1, 4, 1, 99999, 10, 4, 0};
@@ -355,8 +363,16 @@ void snmp_custom_init_oids(void)
   snmpData[17].oidlen = build_oid_scalar(snmpData[17].oid, GROUP_SYSTEM, LEAF_SYS_HWFAULT);
 
   // ===== Trap severity (scalar) =====
-  build_oid_scalar(OID_TRAP_SEVERITY, 1, 99);
-  build_oid_scalar(OID_TRAP_SITE_ID, 1,55);
+  build_oid_scalar(OID_TRAP_SEVERITY, 1, 1);
+  build_oid_scalar(OID_TRAP_SITE_ID, 1,2);
+  build_oid_scalar(OID_TRAP_BATT_VOLT, 1,3);
+  build_oid_scalar(OID_TRAP_BATT_SOC, 1,4);
+  build_oid_scalar(OID_TRAP_CURRENT, 1,5);
+  build_oid_scalar(OID_TRAP_BATT_RUNTIME, 1, 6);
+  build_oid_scalar(OID_TRAP_TEMP, 1, 7);
+  build_oid_scalar(OID_TRAP_AC_STATUS, 1, 9);
+  build_oid_branch(OID_TRAP_AC_LOSSTIME, 10);
+  build_oid_branch(OID_TRAP_MESSAGE, 11);
 }
 
 __attribute__((constructor)) static void _snmp_custom_ctor(void) { snmp_custom_init_oids(); }
@@ -468,21 +484,19 @@ void snmp_send_trap_custom(uint8_t *managerIP, uint8_t *agentIP, uint8_t trap_co
   app_config_t const *cfg = app_cfg_get();
 
   // ===== VarBinds =====
-  dataEntryType vars[6];
+  dataEntryType vars[8];
   uint8_t vcount = 0;
 
-  // 1️⃣ Mức độ nghiêm trọng
   vars[vcount++] = makeIntVar(OID_TRAP_SEVERITY, sizeof(OID_TRAP_SEVERITY),
                               get_trap_severity(trap_code));
 
-  // 2️⃣ Thêm các thông số ngữ cảnh về pin / hệ thống
-  // vars[vcount++] = makeIntVar(OID_TRAP_BATT_VOLT, sizeof(OID_TRAP_BATT_VOLT), 123);
-  // vars[vcount++] = makeIntVar(OID_TRAP_BATT_SOC, sizeof(OID_TRAP_BATT_SOC), 234);
-  // vars[vcount++] = makeIntVar(OID_TRAP_BATT_SOC, sizeof(OID_TRAP_BATT_SOC), 222);
-  // vars[vcount++] = makeIntVar(OID_TRAP_BATT_SOC, sizeof(OID_TRAP_BATT_SOC), 444);
-
-  // vars[vcount++] = makeStrVar(OID_TRAP_SITE_ID, sizeof(OID_TRAP_SITE_ID), "cfg->device_name");
-  vars[vcount++] = makeIntVar(OID_TRAP_SITE_ID, sizeof(OID_TRAP_SITE_ID), (int)psu.batt_voltage*100);
+  vars[vcount++] = makeIntVar(OID_TRAP_BATT_VOLT, sizeof(OID_TRAP_BATT_VOLT), (int32_t)psu.batt_voltage * 100);
+  vars[vcount++] = makeIntVar(OID_TRAP_CURRENT, sizeof(OID_TRAP_CURRENT), (int32_t)psu.iout * 1000);
+  vars[vcount++] = makeIntVar(OID_TRAP_BATT_SOC, sizeof(OID_TRAP_BATT_SOC),(int32_t)psu.batt_soc * 10);
+  vars[vcount++] = makeIntVar(OID_TRAP_BATT_RUNTIME, sizeof(OID_TRAP_BATT_RUNTIME),(int32_t) psu.batt_runtime);
+  vars[vcount++] = makeIntVar(OID_TRAP_AC_STATUS, sizeof(OID_TRAP_AC_STATUS), psu.fault.bits.ac_fail ? 1 : 0);
+  vars[vcount++] = makeIntVar(OID_TRAP_AC_LOSSTIME, sizeof(OID_TRAP_AC_LOSSTIME), (int32_t) psu.AC_loss_time_ms/1000);
+  vars[vcount++] = makeStrVar(OID_TRAP_SITE_ID, sizeof(OID_TRAP_SITE_ID), cfg->psu.site_identifier);
 
   printf("[SNMP] Trap %u sent with %u varbinds\n", trap_code, vcount);
 
@@ -499,6 +513,7 @@ void initial_Trap(uint8_t *managerIP, uint8_t *agentIP)
   enterprise_oid.oidlen = write_enterprise_root(enterprise_oid.oid);
   uint8_t warmStartOID[] = {1, 3, 6, 1, 6, 3, 1, 1, 5, 2};
   snmp_sendTrapV2(managerIP, (int8_t *)COMMUNITY, warmStartOID, sizeof(warmStartOID), NULL, 0);
+  snmp_send_trap_custom(managerIP, agentIP, SNMPTRAP_WARMSTART);
 
   // snmp_sendTrap(managerIP, agentIP, (int8_t*)COMMUNITY,
   //               enterprise_oid, SNMPTRAP_WARMSTART, 0 /* specific */, 0);
@@ -509,93 +524,66 @@ void initial_Trap(uint8_t *managerIP, uint8_t *agentIP)
 /* ===================================================================== */
 static uint16_t last_fault = 0xFFFF;
 void snmp_trap_state_reset(void) { last_fault = 0xFFFF; }
-
 void snmp_process_fault_trap(uint8_t *managerIP, uint8_t *agentIP)
 {
-  static uint16_t last_fault = 0xFFFF;      // 0xFFFF = chưa khởi tạo
-  static uint8_t last_runtime_level = 0xFF; // theo dõi mức cảnh báo runtime trước đó
-  static uint8_t last_soc_level = 0xFF;     // theo dõi mức cảnh báo SOC trước đó
+  static uint16_t last_fault = 0xFFFF;
+  static uint8_t last_runtime_level = 0xFF;
+  static uint8_t last_soc_level = 0xFF;
 
-  // Đọc trạng thái PSU hiện tại (thread-safe)
+  // Đọc dữ liệu PSU hiện tại
+  const app_config_t *cfg = app_cfg_get();
   psu_data_t psu = psu_data_read();
   uint16_t new_fault = psu.fault.raw;
 
-  // Lần đầu: chỉ ghi nhận trạng thái ban đầu để tránh bắn trap giả
-  // Lần đầu tiên khởi tạo
+  // Bỏ qua lần đầu
   if (last_fault == 0xFFFF)
   {
     last_fault = new_fault;
-    last_runtime_level = 0xFF;
-    last_soc_level = 0xFF;
     return;
   }
+
   uint16_t changed = (uint16_t)(last_fault ^ new_fault);
   if (!changed)
-    return; // không có thay đổi -> thoát nhanh
+    goto battery_check; // không thay đổi, bỏ qua
 
-  const app_config_t *cfg = app_cfg_get();
-  uint8_t mask = cfg ? cfg->trap_enable_mask : 0xFF; // nếu chưa có cfg thì bắn tất cả
+  uint8_t mask = cfg ? cfg->trap_enable_mask : 0xFF;
 
-  printf("[SNMP] Fault changed: old=0x%04X new=0x%04X (mask=0x%02X)\n",
-         last_fault, new_fault, mask);
+  printf("[SNMP] Fault changed: old=0x%04X new=0x%04X\n", last_fault, new_fault);
 
-  // ===== AC_FAIL: Power Failure / Power Restored =====
+  // AC_FAIL
   if (changed & (1u << BIT_ACFAIL))
   {
     if (TRAP_EN_POWERFAIL(mask))
-    {
-      if (psu.fault.bits.ac_fail)
-        snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_FAILURE);
-      else
-        snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_RESTORED);
-    }
+      snmp_send_trap_custom(managerIP, agentIP,
+                            psu.fault.bits.ac_fail ? TRAP_POWER_FAILURE : TRAP_POWER_RESTORED);
   }
 
-  // ===== OP_OFF: Output Disabled / Output Restored =====
-  if (changed & (1u << BIT_OPOFF))
-  {
-    // tuỳ chọn: dùng chung bit enable với PowerFail, hoặc luôn bắn
-    if (TRAP_EN_POWERFAIL(mask))
-    {
-      if (psu.fault.bits.op_off)
-        snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_DISABLED);
-      else
-        snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_RESTORED);
-    }
-  }
-
-  // ===== OTP: Over Temperature Set/Cleared =====
+  // OTP
   if (changed & (1u << BIT_OTP))
   {
     if (TRAP_EN_OVERTEMP(mask))
-    {
-      if (psu.fault.bits.otp)
-        snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_TEMPERATURE);
-      else
-        snmp_send_trap_custom(managerIP, agentIP, TRAP_OTP_CLEARED);
-    }
+      snmp_send_trap_custom(managerIP, agentIP,
+                            psu.fault.bits.otp ? TRAP_OVER_TEMPERATURE : TRAP_OTP_CLEARED);
   }
 
-  // ===== OLP: Over Current Set/Cleared =====
+  // OLP
   if (changed & (1u << BIT_OLP))
   {
     if (TRAP_EN_OVERCURR(mask))
-    {
-      if (psu.fault.bits.olp)
-        snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_CURRENT);
-      else
-        snmp_send_trap_custom(managerIP, agentIP, TRAP_OCP_CLEARED);
-    }
+      snmp_send_trap_custom(managerIP, agentIP,
+                            psu.fault.bits.olp ? TRAP_OVER_CURRENT : TRAP_OCP_CLEARED);
   }
 
-  // ============================
-  // ===== Battery runtime ======
-  // ============================
-
-  uint32_t runtime_min = psu.batt_runtime; // thời gian còn lại (phút)
+battery_check:
+  // ======================
+  //  Battery Runtime Trap
+  // ======================
+  uint32_t runtime_min = psu.batt_runtime;
   uint8_t runtime_level = 0xFF;
 
+  // const psu_config_t batt_cfg = cfg ? cfg->psu : (psu_config_t){0};
   const psu_config_t batt_cfg = cfg->psu;
+
 
   if (batt_cfg.warning_60min_enabled && runtime_min <= 60 && runtime_min > 30)
     runtime_level = 60;
@@ -606,42 +594,53 @@ void snmp_process_fault_trap(uint8_t *managerIP, uint8_t *agentIP)
   else if (batt_cfg.warning_5min_enabled && runtime_min <= 5)
     runtime_level = 5;
 
+  // Hysteresis: nếu runtime tăng lên gấp đôi ngưỡng → reset trap
+  if (last_runtime_level != 0xFF)
+  {
+    uint8_t recover = last_runtime_level * 2; // ví dụ 15min → hồi phục ở 30min
+    if (runtime_min > recover)
+    {
+      printf("[SNMP] Runtime recovered above hysteresis (%umin > %umin)\n",
+             runtime_min, recover);
+      last_runtime_level = 0xFF;
+    }
+  }
+
   if (runtime_level != 0xFF && runtime_level != last_runtime_level)
   {
     printf("[SNMP] Battery runtime warning: %u min remaining\n", runtime_min);
     switch (runtime_level)
     {
-    case 60:
-      snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_60MIN);
-      break;
-    case 30:
-      snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_30MIN);
-      break;
-    case 15:
-      snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_15MIN);
-      break;
-    case 5:
-      snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_5MIN);
-      break;
+    case 60: snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_60MIN); break;
+    case 30: snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_30MIN); break;
+    case 15: snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_15MIN); break;
+    case 5:  snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_5MIN); break;
     }
     last_runtime_level = runtime_level;
   }
 
-  // ============================
-  // ===== Battery SOC traps ====
-  // ============================
-
-  float soc = psu.batt_soc; // phần trăm (0–100)
+  // ======================
+  //  Battery SOC Trap
+  // ======================
+  float soc = psu.batt_soc;
   uint8_t soc_level = 0xFF;
 
-  if (cfg)
+  if (batt_cfg.warning_soc30_enabled && soc <= 30 && soc > 20)
+    soc_level = 30;
+  else if (batt_cfg.warning_soc20_enabled && soc <= 20 && soc > 10)
+    soc_level = 20;
+  else if (batt_cfg.warning_soc10_enabled && soc <= 10)
+    soc_level = 10;
+
+  // Hysteresis: nếu SOC > (ngưỡng + 5%) → reset trap
+  if (last_soc_level != 0xFF)
   {
-    if (batt_cfg.warning_soc30_enabled && soc <= 30 && soc > 20)
-      soc_level = 30;
-    else if (batt_cfg.warning_soc20_enabled && soc <= 20 && soc > 10)
-      soc_level = 20;
-    else if (batt_cfg.warning_soc10_enabled && soc <= 10)
-      soc_level = 10;
+    float recover = last_soc_level + 5.0f;
+    if (soc > recover)
+    {
+      printf("[SNMP] SOC recovered above hysteresis (%.1f%% > %.1f%%)\n", soc, recover);
+      last_soc_level = 0xFF;
+    }
   }
 
   if (soc_level != 0xFF && soc_level != last_soc_level)
@@ -649,22 +648,173 @@ void snmp_process_fault_trap(uint8_t *managerIP, uint8_t *agentIP)
     printf("[SNMP] Battery SOC warning: %.1f%%\n", soc);
     switch (soc_level)
     {
-    case 30:
-      snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_30PCT);
-      break;
-    case 20:
-      snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_20PCT);
-      break;
-    case 10:
-      snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_10PCT);
-      break;
+    case 30: snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_30PCT); break;
+    case 20: snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_20PCT); break;
+    case 10: snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_10PCT); break;
     }
     last_soc_level = soc_level;
   }
 
-  last_fault = new_fault;
+  // Cập nhật cuối
   last_fault = new_fault;
 }
+
+
+
+// void snmp_process_fault_trap(uint8_t *managerIP, uint8_t *agentIP)
+// {
+//   static uint16_t last_fault = 0xFFFF;      // 0xFFFF = chưa khởi tạo
+//   static uint8_t last_runtime_level = 0xFF; // theo dõi mức cảnh báo runtime trước đó
+//   static uint8_t last_soc_level = 0xFF;     // theo dõi mức cảnh báo SOC trước đó
+
+//   // Đọc trạng thái PSU hiện tại (thread-safe)
+//   psu_data_t psu = psu_data_read();
+//   uint16_t new_fault = psu.fault.raw;
+
+//   // Lần đầu: chỉ ghi nhận trạng thái ban đầu để tránh bắn trap giả
+//   // Lần đầu tiên khởi tạo
+//   if (last_fault == 0xFFFF)
+//   {
+//     last_fault = new_fault;
+//     last_runtime_level = 0xFF;
+//     last_soc_level = 0xFF;
+//     return;
+//   }
+//   uint16_t changed = (uint16_t)(last_fault ^ new_fault);
+//   if (!changed)
+//     return; // không có thay đổi -> thoát nhanh
+
+//   const app_config_t *cfg = app_cfg_get();
+//   uint8_t mask = cfg ? cfg->trap_enable_mask : 0xFF; // nếu chưa có cfg thì bắn tất cả
+
+//   printf("[SNMP] Fault changed: old=0x%04X new=0x%04X (mask=0x%02X)\n",
+//          last_fault, new_fault, mask);
+
+//   // ===== AC_FAIL: Power Failure / Power Restored =====
+//   if (changed & (1u << BIT_ACFAIL))
+//   {
+//     if (TRAP_EN_POWERFAIL(mask))
+//     {
+//       if (psu.fault.bits.ac_fail)
+//         snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_FAILURE);
+//       else
+//         snmp_send_trap_custom(managerIP, agentIP, TRAP_POWER_RESTORED);
+//     }
+//   }
+
+//   // ===== OP_OFF: Output Disabled / Output Restored =====
+//   if (changed & (1u << BIT_OPOFF))
+//   {
+//     // tuỳ chọn: dùng chung bit enable với PowerFail, hoặc luôn bắn
+//     if (TRAP_EN_POWERFAIL(mask))
+//     {
+//       if (psu.fault.bits.op_off)
+//         snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_DISABLED);
+//       else
+//         snmp_send_trap_custom(managerIP, agentIP, TRAP_OUTPUT_RESTORED);
+//     }
+//   }
+
+//   // ===== OTP: Over Temperature Set/Cleared =====
+//   if (changed & (1u << BIT_OTP))
+//   {
+//     if (TRAP_EN_OVERTEMP(mask))
+//     {
+//       if (psu.fault.bits.otp)
+//         snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_TEMPERATURE);
+//       else
+//         snmp_send_trap_custom(managerIP, agentIP, TRAP_OTP_CLEARED);
+//     }
+//   }
+
+//   // ===== OLP: Over Current Set/Cleared =====
+//   if (changed & (1u << BIT_OLP))
+//   {
+//     if (TRAP_EN_OVERCURR(mask))
+//     {
+//       if (psu.fault.bits.olp)
+//         snmp_send_trap_custom(managerIP, agentIP, TRAP_OVER_CURRENT);
+//       else
+//         snmp_send_trap_custom(managerIP, agentIP, TRAP_OCP_CLEARED);
+//     }
+//   }
+
+//   // ============================
+//   // ===== Battery runtime ======
+//   // ============================
+
+//   uint32_t runtime_min = psu.batt_runtime; // thời gian còn lại (phút)
+//   uint8_t runtime_level = 0xFF;
+
+//   const psu_config_t batt_cfg = cfg->psu;
+
+//   if (batt_cfg.warning_60min_enabled && runtime_min <= 60 && runtime_min > 30)
+//     runtime_level = 60;
+//   else if (batt_cfg.warning_30min_enabled && runtime_min <= 30 && runtime_min > 15)
+//     runtime_level = 30;
+//   else if (batt_cfg.warning_15min_enabled && runtime_min <= 15 && runtime_min > 5)
+//     runtime_level = 15;
+//   else if (batt_cfg.warning_5min_enabled && runtime_min <= 5)
+//     runtime_level = 5;
+
+//   if (runtime_level != 0xFF && runtime_level != last_runtime_level)
+//   {
+//     printf("[SNMP] Battery runtime warning: %u min remaining\n", runtime_min);
+//     switch (runtime_level)
+//     {
+//     case 60:
+//       snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_60MIN);
+//       break;
+//     case 30:
+//       snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_30MIN);
+//       break;
+//     case 15:
+//       snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_15MIN);
+//       break;
+//     case 5:
+//       snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_RUNTIME_5MIN);
+//       break;
+//     }
+//     last_runtime_level = runtime_level;
+//   }
+
+//   // ============================
+//   // ===== Battery SOC traps ====
+//   // ============================
+
+//   float soc = psu.batt_soc; // phần trăm (0–100)
+//   uint8_t soc_level = 0xFF;
+
+//   if (cfg)
+//   {
+//     if (batt_cfg.warning_soc30_enabled && soc <= 30 && soc > 20)
+//       soc_level = 30;
+//     else if (batt_cfg.warning_soc20_enabled && soc <= 20 && soc > 10)
+//       soc_level = 20;
+//     else if (batt_cfg.warning_soc10_enabled && soc <= 10)
+//       soc_level = 10;
+//   }
+
+//   if (soc_level != 0xFF && soc_level != last_soc_level)
+//   {
+//     printf("[SNMP] Battery SOC warning: %.1f%%\n", soc);
+//     switch (soc_level)
+//     {
+//     case 30:
+//       snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_30PCT);
+//       break;
+//     case 20:
+//       snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_20PCT);
+//       break;
+//     case 10:
+//       snmp_send_trap_custom(managerIP, agentIP, ES_TRAP_SOC_10PCT);
+//       break;
+//     }
+//     last_soc_level = soc_level;
+//   }
+
+//   last_fault = new_fault;
+// }
 
 /* ===================================================================== */
 /*            TRAP: SPEC 5.1–5.2 (runtime / SOC / temp / misc)           */

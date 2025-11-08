@@ -1,99 +1,194 @@
 VF-PSU-MIB DEFINITIONS ::= BEGIN
 
 IMPORTS
-    MODULE-IDENTITY, OBJECT-TYPE, NOTIFICATION-TYPE, enterprises, Integer32
+    MODULE-IDENTITY, OBJECT-TYPE, enterprises, Integer32
         FROM SNMPv2-SMI
     DisplayString
         FROM SNMPv2-TC;
 
 vfPsuMib MODULE-IDENTITY
-    LAST-UPDATED "202511040000Z"
+    LAST-UPDATED "202511080000Z"
     ORGANIZATION "VF Power Systems"
     CONTACT-INFO "support@vf.vn"
-    DESCRIPTION "MIB for VF PSU / Battery Monitoring traps."
+    DESCRIPTION
+        "MIB module for VF PSU Monitoring System, providing AC Power, Battery, Output, Environment, and System groups."
     ::= { enterprises 99999 }
 
--- Root OID tree
-psuObjects      OBJECT IDENTIFIER ::= { vfPsuMib 1 }
-psuTraps        OBJECT IDENTIFIER ::= { vfPsuMib 10 }
+-- ======================================================
+-- Root object groups
+-- ======================================================
+
+psuAcPower       OBJECT IDENTIFIER ::= { vfPsuMib 1 }
+psuBattery       OBJECT IDENTIFIER ::= { vfPsuMib 2 }
+psuOutput        OBJECT IDENTIFIER ::= { vfPsuMib 3 }
+psuEnvironment   OBJECT IDENTIFIER ::= { vfPsuMib 4 }
+psuSystem        OBJECT IDENTIFIER ::= { vfPsuMib 5 }
 
 -- ======================================================
--- Common objects (static / polled values)
+-- 1. AC Power Group
+-- ======================================================
+
+psuACVoltage OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.01 Volt"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "AC input voltage (0.01V)."
+    ::= { psuAcPower 1 }
+
+psuACStatus OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "AC status (0=OK, 1=Fail, 2=Restored)."
+    ::= { psuAcPower 2 }
+
+psuACLossTime OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "seconds"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Elapsed time since last AC loss (seconds)."
+    ::= { psuAcPower 3 }
+
+-- ======================================================
+-- 2. Battery Group
 -- ======================================================
 
 psuBatteryVoltage OBJECT-TYPE
-    SYNTAX      INTEGER
+    SYNTAX      Integer32
+    UNITS       "0.01 Volt"
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Battery voltage in 0.1V."
-    ::= { psuObjects 1 }
+    DESCRIPTION "Battery voltage (0.01V)."
+    ::= { psuBattery 1 }
+
+psuBatteryCapacityAh OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.01 Ah"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Rated battery capacity (Ah)."
+    ::= { psuBattery 2 }
 
 psuBatterySOC OBJECT-TYPE
     SYNTAX      Integer32
+    UNITS       "0.1 %"
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Battery State of Charge (%)"
-    ::= { psuObjects 2 }
+    DESCRIPTION "Battery State of Charge (SOC)."
+    ::= { psuBattery 3 }
 
-psuBatteryRuntimeMinutes OBJECT-TYPE
+psuBatteryRemainingAh OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.01 Ah"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Remaining battery capacity (Ah)."
+    ::= { psuBattery 4 }
+
+psuBatteryRuntime OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "minutes"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Estimated remaining battery runtime (minutes)."
+    ::= { psuBattery 5 }
+
+psuBatteryTemperature OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.01 °C"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Battery temperature."
+    ::= { psuBattery 6 }
+
+psuChargerMode OBJECT-TYPE
     SYNTAX      Integer32
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Estimated battery runtime in minutes."
-    ::= { psuObjects 3 }
+    DESCRIPTION "Charger mode (enum)."
+    ::= { psuBattery 7 }
 
-trapSeverity OBJECT-TYPE
-    SYNTAX      INTEGER { info(1), warning(2), critical(3), normal(4) }
+psuBatteryWarningFlags OBJECT-TYPE
+    SYNTAX      Integer32
     MAX-ACCESS  read-only
     STATUS      current
-    DESCRIPTION "Severity level for each trap."
-    ::= { psuObjects 99 }
+    DESCRIPTION "Battery warning flags (bitmask)."
+    ::= { psuBattery 8 }
 
 -- ======================================================
--- Notifications (Traps)
--- Mỗi trap thêm OBJECTS { trapSeverity } để SNMP manager hiểu mức độ.
+-- 3. Output Group
 -- ======================================================
 
-trapACLoss NOTIFICATION-TYPE
-    OBJECTS { psuBatteryVoltage, psuBatterySOC, trapSeverity }
-    STATUS  current
-    DESCRIPTION "AC power lost, device running on battery."
-    ::= { psuTraps 100 }
+psuOutputVoltage OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.01 Volt"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Output voltage (0.01V)."
+    ::= { psuOutput 1 }
 
-trapACRestored NOTIFICATION-TYPE
-    OBJECTS { trapSeverity }
-    STATUS  current
-    DESCRIPTION "AC power restored."
-    ::= { psuTraps 101 }
+psuOutputCurrent OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "mA"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Output current (mA)."
+    ::= { psuOutput 2 }
 
-trapBatteryRuntime30Min NOTIFICATION-TYPE
-    OBJECTS { psuBatteryVoltage, psuBatterySOC, psuBatteryRuntimeMinutes, trapSeverity }
-    STATUS  current
-    DESCRIPTION "Battery runtime below 30 minutes."
-    ::= { psuTraps 103 }
+psuOutputPower OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "Watt"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Output power (W)."
+    ::= { psuOutput 3 }
 
-trapHwFault NOTIFICATION-TYPE
-    OBJECTS { trapSeverity }
-    STATUS  current
-    DESCRIPTION "Hardware fault detected."
-    ::= { psuTraps 113 }
+psuOutputStatus OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Output status (enum)."
+    ::= { psuOutput 4 }
 
-trapBmsFault NOTIFICATION-TYPE
-    OBJECTS { trapSeverity }
-    STATUS  current
-    DESCRIPTION "BMS fault detected."
-    ::= { psuTraps 114 }
+-- ======================================================
+-- 4. Environment Group
+-- ======================================================
 
-trapEmergencyShutdown NOTIFICATION-TYPE
-    OBJECTS { trapSeverity }
-    STATUS  current
-    DESCRIPTION "Emergency shutdown condition (battery low)."
-    ::= { psuTraps 115 }
+psuEnvTemperature OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.01 °C"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Ambient temperature (0.01°C)."
+    ::= { psuEnvironment 1 }
 
-trapBatteryFullCharged NOTIFICATION-TYPE
-    OBJECTS { trapSeverity }
-    STATUS  current
-    DESCRIPTION "Battery fully charged."
-    ::= { psuTraps 117 }
+psuEnvHumidity OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "0.1 %RH"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Ambient humidity (0.1%RH)."
+    ::= { psuEnvironment 2 }
+
+-- ======================================================
+-- 5. System Group
+-- ======================================================
+
+psuSystemUptime OBJECT-TYPE
+    SYNTAX      Integer32
+    UNITS       "minutes"
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "System uptime in minutes."
+    ::= { psuSystem 1 }
+
+psuSystemHardwareFault OBJECT-TYPE
+    SYNTAX      Integer32
+    MAX-ACCESS  read-only
+    STATUS      current
+    DESCRIPTION "Hardware fault status bitmask."
+    ::= { psuSystem 2 }
 
 END

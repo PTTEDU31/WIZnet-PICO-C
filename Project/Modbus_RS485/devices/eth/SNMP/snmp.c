@@ -29,6 +29,7 @@ int32_t parseRequest();
 int32_t parseCommunity();
 int32_t parseVersion();
 int32_t parseSNMPMessage();
+static int asn1_encode_length(uint8_t *buf, uint32_t len);
 
 // Debugging function
 #ifdef _SNMP_DEBUG_
@@ -766,66 +767,86 @@ void ipToByteArray(int8_t *ip, uint8_t *pDes)
 	pDes[3] = ip4;
 }
 
-int32_t makeTrapVariableBindings(dataEntryType *oid_data, void *ptr, uint32_t *len)
+#include <string.h>
+#include <stdint.h>
+#include "snmp.h"
+
+extern int asn1_encode_length(uint8_t *buf, uint32_t len); // dùng lại từ snmp_sendTrapV2_fixed.c
+
+int32_t makeTrapVariableBindings(dataEntryType *vb, void *ptr, uint32_t *len)
 {
-	uint32_t j;
+    uint8_t *p = (uint8_t *)ptr;
+    int idx = 0;
+    int len_bytes;
 
-	((uint8_t *)ptr)[0] = 0x30;
-	((uint8_t *)ptr)[1] = 0xff;
-	((uint8_t *)ptr)[2] = 0x06;
-	((uint8_t *)ptr)[3] = oid_data->oidlen;
+    // SEQUENCE mở đầu cho VarBind
+    p[idx++] = 0x30;
+    int seq_len_pos = idx; 
+    idx += 3; // dành chỗ cho length (BER long form)
 
-	for (j = 0; j < oid_data->oidlen; j++)
-	{
-		((uint8_t *)ptr)[j + 4] = oid_data->oid[j];
-	}
+    // --------------- OID ---------------
+    p[idx++] = 0x06;                        // OBJECT IDENTIFIER
+    p[idx++] = vb->oidlen;                  // độ dài OID
+    memcpy(&p[idx], vb->oid, vb->oidlen);   // copy dữ liệu OID
+    idx += vb->oidlen;
 
-	switch (oid_data->dataType)
-	{
-	case SNMPDTYPE_OCTET_STRING:
-	case SNMPDTYPE_OBJ_ID:
-	{
-		uint8_t *string = &((uint8_t *)ptr)[4 + oid_data->oidlen + 2];
+    // --------------- VALUE ---------------
+    switch (vb->dataType)
+    {
+    case SNMPDTYPE_INTEGER:
+    case SNMPDTYPE_COUNTER:
+    case SNMPDTYPE_GAUGE:
+    {
+        uint32_t val = HTONL(vb->u.intval);
+        p[idx++] = 0x02;     // INTEGER
+        p[idx++] = 0x04;     // length = 4
+        memcpy(&p[idx], &val, 4);
+        idx += 4;
+        break;
+    }
 
-		if (oid_data->dataType == SNMPDTYPE_OCTET_STRING)
-		{
-			oid_data->dataLen = (uint8_t)strlen((char const *)&oid_data->u.octetstring);
-		}
-		for (j = 0; j < oid_data->dataLen; j++)
-		{
-			string[j] = oid_data->u.octetstring[j];
-		}
+    case SNMPDTYPE_TIME_TICKS:
+    {
+        uint32_t val = HTONL(vb->u.intval);
+        p[idx++] = 0x43;     // TimeTicks
+        p[idx++] = 0x04;
+        memcpy(&p[idx], &val, 4);
+        idx += 4;
+        break;
+    }
 
-		((uint8_t *)ptr)[4 + oid_data->oidlen] = oid_data->dataType;
-		((uint8_t *)ptr)[4 + oid_data->oidlen + 1] = oid_data->dataLen;
-		((uint8_t *)ptr)[1] = 2 + oid_data->oidlen + 2 + oid_data->dataLen;
-		*len = 4 + oid_data->oidlen + 2 + oid_data->dataLen;
-	}
-	break;
+    case SNMPDTYPE_OCTET_STRING:
+    {
+        uint8_t str_len = vb->dataLen;
+        p[idx++] = 0x04;     // OCTET STRING
+        p[idx++] = str_len;
+        memcpy(&p[idx], vb->u.octetstring, str_len);
+        idx += str_len;
+        break;
+    }
 
-	case SNMPDTYPE_INTEGER:
-	case SNMPDTYPE_TIME_TICKS:
-	case SNMPDTYPE_COUNTER:
-	case SNMPDTYPE_GAUGE:
-	{
-		oid_data->dataLen = 4;
-		uint32_t val = HTONL(oid_data->u.intval);
-		// uint32_t val = oid_data->u.intval;
+    case SNMPDTYPE_OBJ_ID:
+    {
+        uint8_t len_oid = vb->dataLen;
+        p[idx++] = 0x06; // OID type
+        p[idx++] = len_oid;
+        memcpy(&p[idx], vb->u.octetstring, len_oid);
+        idx += len_oid;
+        break;
+    }
 
-		memcpy(&((uint8_t *)ptr)[4 + oid_data->oidlen + 2], &val, sizeof(val));
+    default:
+        return INVALID_DATA_TYPE;
+    }
 
-		((uint8_t *)ptr)[4 + oid_data->oidlen] = oid_data->dataType;
-		((uint8_t *)ptr)[4 + oid_data->oidlen + 1] = oid_data->dataLen;
-		((uint8_t *)ptr)[1] = 2 + oid_data->oidlen + 2 + oid_data->dataLen;
-		*len = 4 + oid_data->oidlen + 2 + oid_data->dataLen;
-	}
-	break;
+    // --------------- Cập nhật SEQUENCE length ---------------
+    uint32_t seq_len = idx - seq_len_pos - 3;
+    len_bytes = asn1_encode_length(&p[seq_len_pos], seq_len);
+    memmove(&p[seq_len_pos + len_bytes], &p[seq_len_pos + 3], idx - (seq_len_pos + 3));
+    idx -= (3 - len_bytes);
 
-	default:
-		return INVALID_DATA_TYPE;
-	}
-
-	return SNMP_SUCCESS;
+    *len = idx;
+    return SNMP_SUCCESS;
 }
 
 int32_t snmp_sendTrap(uint8_t *managerIP, uint8_t *agentIP, int8_t *community, dataEntryType enterprise_oid, uint32_t genericTrap, uint32_t specificTrap, uint32_t va_count, ...)
@@ -975,100 +996,133 @@ void dumpCode(uint8_t *header, uint8_t *tail, uint8_t *buff, int32_t len)
 }
 #endif
 
-// snmp.c
-int32_t snmp_sendTrapV2(uint8_t *managerIP, int8_t *community,
-						const uint8_t *trap_oid, uint8_t trap_oid_len,
-						dataEntryType *extra_vbs, uint32_t extra_count)
+// ==========================
+// ASN.1 Length Encoder
+// ==========================
+static int asn1_encode_length(uint8_t *buf, uint32_t len)
 {
-	// Khung ASN.1 tổng
-	uint8_t *p = packet_trap;
-	int idx = 0;
-	packet_trap[idx++] = 0x30; // SEQUENCE
-	int len_msg_pos = idx++;   // placeholder length
+    if (len < 128)
+    {
+        buf[0] = (uint8_t)len;
+        return 1;
+    }
+    else if (len < 256)
+    {
+        buf[0] = 0x81;
+        buf[1] = (uint8_t)len;
+        return 2;
+    }
+    else
+    {
+        buf[0] = 0x82;
+        buf[1] = (uint8_t)(len >> 8);
+        buf[2] = (uint8_t)(len);
+        return 3;
+    }
+}
 
-	// Version = 1 (SNMPv2c)
-	packet_trap[idx++] = 0x02;
-	packet_trap[idx++] = 0x01;
-	packet_trap[idx++] = 0x01;
+// ==========================
+// SNMPv2 Trap Sender
+// ==========================
+int32_t snmp_sendTrapV2(uint8_t *managerIP, int8_t *community,
+                        const uint8_t *trap_oid, uint8_t trap_oid_len,
+                        dataEntryType *extra_vbs, uint32_t extra_count)
+{
+    uint8_t *p = packet_trap;
+    int idx = 0;
+    int len_bytes;
 
-	// Community
-	packet_trap[idx++] = 0x04;
-	packet_trap[idx++] = (uint8_t)strlen((char *)community);
-	memcpy(&packet_trap[idx], community, strlen((char *)community));
-	idx += (uint8_t)strlen((char *)community);
+    // ---------- SNMP Message Sequence ----------
+    p[idx++] = 0x30; // SEQUENCE
+    int len_msg_pos = idx; idx += 3; // reserve 3 bytes max for long-form
 
-	// PDU = SNMPv2-Trap (0xA7)
-	packet_trap[idx++] = 0xA7;
-	int len_pdu_pos = idx++; // placeholder
+    // ---------- Version ----------
+    p[idx++] = 0x02; p[idx++] = 0x01; p[idx++] = 0x01; // v2c = 1
 
-	// request-id, error-status, error-index (theo chuẩn v2c)
-	packet_trap[idx++] = 0x02;
-	packet_trap[idx++] = 0x01;
-	packet_trap[idx++] = 0x00; // request-id = 0
-	packet_trap[idx++] = 0x02;
-	packet_trap[idx++] = 0x01;
-	packet_trap[idx++] = 0x00; // error-status = 0
-	packet_trap[idx++] = 0x02;
-	packet_trap[idx++] = 0x01;
-	packet_trap[idx++] = 0x00; // error-index = 0
+    // ---------- Community ----------
+    uint8_t comm_len = (uint8_t)strlen((char *)community);
+    p[idx++] = 0x04; p[idx++] = comm_len;
+    memcpy(&p[idx], community, comm_len); idx += comm_len;
 
-	// VarBindList
-	packet_trap[idx++] = 0x30;
-	int len_vbl_pos = idx++; // placeholder
+    // ---------- PDU ----------
+    p[idx++] = 0xA7; // SNMPv2-Trap
+    int len_pdu_pos = idx; idx += 3; // reserve for length
 
-	// VarBind 1: sysUpTime.0  (1.3.6.1.2.1.1.3.0) TimeTicks
-	uint8_t sysUpTime_oid[] = {1, 3, 6, 1, 2, 1, 1, 3, 0};
-	uint32_t ticks;
-	uint8_t len_tmp;
-	currentUptime(&ticks, &len_tmp); // đã có sẵn trong snmp.c, trả về ticks 10ms 4 byte
-	// SEQUENCE
-	packet_trap[idx++] = 0x30;
-	int v1_len_pos = idx++;
-	// OID
-	packet_trap[idx++] = 0x06;
-	packet_trap[idx++] = sizeof(sysUpTime_oid);
-	memcpy(&packet_trap[idx], sysUpTime_oid, sizeof(sysUpTime_oid));
-	idx += sizeof(sysUpTime_oid);
-	// TimeTicks
-	packet_trap[idx++] = 0x43; // ASN.1 tag TimeTicks
-	packet_trap[idx++] = 0x04; // length = 4 bytes
+    // request-id, error-status, error-index = 0
+    uint8_t req_hdr[] = {
+        0x02, 0x01, 0x00,
+        0x02, 0x01, 0x00,
+        0x02, 0x01, 0x00
+    };
+    memcpy(&p[idx], req_hdr, sizeof(req_hdr)); idx += sizeof(req_hdr);
 
-	uint32_t val = ticks; // đổi thứ tự byte big-endian
+    // ---------- VarBindList ----------
+    p[idx++] = 0x30;
+    int len_vbl_pos = idx; idx += 3;
 
-	packet_trap[idx++] = (uint8_t)(val >> 24);
-	packet_trap[idx++] = (uint8_t)(val >> 16);
-	packet_trap[idx++] = (uint8_t)(val >> 8);
-	packet_trap[idx++] = (uint8_t)(val);
+    // VarBind 1: sysUpTime.0
+    uint8_t sysUpTime_oid[] = {1,3,6,1,2,1,1,3,0};
+    uint32_t ticks; uint8_t len_tmp;
+    currentUptime(&ticks, &len_tmp);
 
-	// VarBind 2: snmpTrapOID.0 (1.3.6.1.6.3.1.1.4.1.0) OID = trap_oid
-	uint8_t snmpTrapOID0[] = {1, 3, 6, 1, 6, 3, 1, 1, 4, 1, 0};
-	packet_trap[idx++] = 0x30;
-	int v2_len_pos = idx++;
-	packet_trap[idx++] = 0x06;
-	packet_trap[idx++] = sizeof(snmpTrapOID0);
-	memcpy(&packet_trap[idx], snmpTrapOID0, sizeof(snmpTrapOID0));
-	idx += sizeof(snmpTrapOID0);
-	packet_trap[idx++] = 0x06;
-	packet_trap[idx++] = trap_oid_len;
-	memcpy(&packet_trap[idx], trap_oid, trap_oid_len);
-	idx += trap_oid_len;
-	packet_trap[v2_len_pos] = (uint8_t)(2 + sizeof(snmpTrapOID0) + 2 + trap_oid_len);
+    p[idx++] = 0x30;
+    int v1_len_pos = idx; idx += 3;
+    p[idx++] = 0x06; p[idx++] = sizeof(sysUpTime_oid);
+    memcpy(&p[idx], sysUpTime_oid, sizeof(sysUpTime_oid)); idx += sizeof(sysUpTime_oid);
+    p[idx++] = 0x43; p[idx++] = 0x04;
+    p[idx++] = (uint8_t)(ticks >> 24);
+    p[idx++] = (uint8_t)(ticks >> 16);
+    p[idx++] = (uint8_t)(ticks >> 8);
+    p[idx++] = (uint8_t)(ticks);
+    len_bytes = asn1_encode_length(&p[v1_len_pos], idx - v1_len_pos - 3);
+    memmove(&p[v1_len_pos + len_bytes], &p[v1_len_pos + 3], idx - (v1_len_pos + 3));
+    idx -= (3 - len_bytes);
 
-	// VarBind 3+: extra varbinds (tùy chọn) – tái dùng makeTrapVariableBindings đã có
-	uint32_t length_buff = 0, length_vbs = 0;
-	for (uint32_t i = 0; i < extra_count; i++)
-	{
-		makeTrapVariableBindings(&extra_vbs[i], &packet_trap[idx], &length_buff);
-		idx += length_buff;
-		length_vbs += length_buff;
-	}
+    // VarBind 2: snmpTrapOID.0
+    uint8_t snmpTrapOID0[] = {1,3,6,1,6,3,1,1,4,1,0};
+    p[idx++] = 0x30;
+    int v2_len_pos = idx; idx += 3;
+    p[idx++] = 0x06; p[idx++] = sizeof(snmpTrapOID0);
+    memcpy(&p[idx], snmpTrapOID0, sizeof(snmpTrapOID0)); idx += sizeof(snmpTrapOID0);
+    p[idx++] = 0x06; p[idx++] = trap_oid_len;
+    memcpy(&p[idx], trap_oid, trap_oid_len); idx += trap_oid_len;
+    len_bytes = asn1_encode_length(&p[v2_len_pos], idx - v2_len_pos - 3);
+    memmove(&p[v2_len_pos + len_bytes], &p[v2_len_pos + 3], idx - (v2_len_pos + 3));
+    idx -= (3 - len_bytes);
 
-	// Điền length VarBindList / PDU / message
-	packet_trap[len_vbl_pos] = (uint8_t)((packet_trap[idx - 1], idx - (len_vbl_pos + 1)));
-	packet_trap[len_pdu_pos] = (uint8_t)(idx - (len_pdu_pos + 1));
-	packet_trap[len_msg_pos] = (uint8_t)(idx - (len_msg_pos + 1));
+    // VarBind 3+: extra VBs
+    for (uint32_t i = 0; i < extra_count; i++)
+    {
+        uint32_t vb_len = 0;
+        makeTrapVariableBindings(&extra_vbs[i], &p[idx], &vb_len);
+        idx += vb_len;
+    }
 
-	socket(SOCK_SNMP_TRAP, Sn_MR_UDP, PORT_SNMP_TRAP, 0);
-	sendto(SOCK_SNMP_TRAP, packet_trap, idx, managerIP, PORT_SNMP_TRAP);
-	return SNMP_SUCCESS;
+    // ---------- Fill lengths ----------
+    uint32_t vbl_len = idx - (len_vbl_pos + 3);
+    len_bytes = asn1_encode_length(&p[len_vbl_pos], vbl_len);
+    memmove(&p[len_vbl_pos + len_bytes], &p[len_vbl_pos + 3], idx - (len_vbl_pos + 3));
+    idx -= (3 - len_bytes);
+
+    uint32_t pdu_len = idx - (len_pdu_pos + 3);
+    len_bytes = asn1_encode_length(&p[len_pdu_pos], pdu_len);
+    memmove(&p[len_pdu_pos + len_bytes], &p[len_pdu_pos + 3], idx - (len_pdu_pos + 3));
+    idx -= (3 - len_bytes);
+
+    uint32_t msg_len = idx - (len_msg_pos + 3);
+    len_bytes = asn1_encode_length(&p[len_msg_pos], msg_len);
+    memmove(&p[len_msg_pos + len_bytes], &p[len_msg_pos + 3], idx - (len_msg_pos + 3));
+    idx -= (3 - len_bytes);
+
+    // ---------- Debug output ----------
+    printf("[SNMP] Sending Trap (%d bytes): ", idx);
+    for (int i = 0; i < idx; i++) printf("%02X ", p[i]);
+    printf("\n");
+
+    // ---------- Send Trap ----------
+    socket(SOCK_SNMP_TRAP, Sn_MR_UDP, PORT_SNMP_TRAP, 0);
+    sendto(SOCK_SNMP_TRAP, p, idx, managerIP, PORT_SNMP_TRAP);
+    close(SOCK_SNMP_TRAP);
+
+    return SNMP_SUCCESS;
 }

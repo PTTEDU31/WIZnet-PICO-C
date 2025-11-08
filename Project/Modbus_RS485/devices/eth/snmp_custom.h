@@ -114,7 +114,7 @@ typedef enum {
 
 /* ======= Hysteresis / debounce / rate-limit ======= */
 #define TRAP_DEBOUNCE_SAMPLES   5
-#define TRAP_RATELIMIT_MS       00000UL // for test
+#define TRAP_RATELIMIT_MS       10000UL // for test
 
 #define RUNTIME_HYS_MIN         2.0f
 #define SOC_HYS_PCT             2.0f
